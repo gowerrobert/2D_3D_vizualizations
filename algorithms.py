@@ -118,7 +118,7 @@ def run_SGD(computeValue, epochs=20, d=2, lr =1.0, x0=None):
         
         for i in idx:
             fi = computeValue(i,x)
-            grad = torch.autograd.grad(fi,x,create_graph=True,retain_graph=True)[0]
+            grad = torch.autograd.grad(fi,x)[0] #,create_graph=True,retain_graph=True
 
             with torch.no_grad():
                 x.sub_(grad, alpha=lr)
@@ -203,7 +203,7 @@ def adam(computeValue, epochs=20, d=2, lr =0.1,  x0=None, beta1 =0.9, beta2 =0.9
         count = 1
         for i in idx:
             fi = computeValue(i,x)
-            grad = torch.autograd.grad(fi,x,create_graph=True,retain_graph=True)[0]
+            grad = torch.autograd.grad(fi,x)[0] #,create_graph=True,retain_graph=True
 
             with torch.no_grad():
                 # m = beta1*m + (1-beta1)*grad
