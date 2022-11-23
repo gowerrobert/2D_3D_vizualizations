@@ -106,7 +106,6 @@ def run_SGD(computeValue, epochs=20, d=2, lr =1.0, x0=None):
         x = torch.randn(d, requires_grad=True).double()*1
     else:   
         x = torch.clone(x0)
-
     np.random.seed(0)
 
     idx = list(range(d))
