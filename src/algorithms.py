@@ -100,6 +100,36 @@ def step_SGD(x, i, computeValue, lr):
 # def run_SGD(computeValue, epochs=20, d=2, lr =1.0, x0=None):
 #     # import pdb; pdb.set_trace()
 #     return run_algorithm(computeValue, step_SGD, epochs=epochs, d=d, lr =lr, x0=x0)
+
+
+def run_GD_teleport(computeValue, epochs=20, d=2, lr =1.0, x0=None, teleport_num=5):
+    torch.manual_seed(0)
+    if x0 is None:
+        x = torch.randn(d, requires_grad=True).double()*1
+    else:   
+        x = torch.clone(x0)
+    np.random.seed(0)
+
+    idx = list(range(d))
+    x_list = []
+    y_list = []
+    fval = []
+    for ep in tqdm(range(epochs)):
+        np.random.shuffle(idx)
+        
+        grad = torch.autograd.grad(computeValue,x)[0] #,create_graph=True,retain_graph=True
+        with torch.no_grad():
+            x.sub_(grad, alpha=lr)
+
+        fval.append(computeValue(x).item() )
+        x_list.append(x[0].item())
+        y_list.append(x[1].item())  
+        if fval[-1] <= EPS_GLOBAL:
+            break      
+    return [x_list, y_list] , fval
+
+
+
 def run_SGD(computeValue, epochs=20, d=2, lr =1.0, x0=None):
     torch.manual_seed(0)
     if x0 is None:

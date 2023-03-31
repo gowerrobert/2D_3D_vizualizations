@@ -1870,7 +1870,7 @@ class Rosenbrock:
 
     def __init__(self, d, a=1, b=100):
         self.d = d
-        self.input_domain = np.array([[-5, 10] for _ in range(d)])
+        self.input_domain = np.array([[-8, 10] for _ in range(d)])
         self.a = a
         self.b = b
 
