@@ -1796,7 +1796,7 @@ class Rastrigin:
 
     def __init__(self, d):
         self.d = d
-        self.input_domain = np.array([[-0.5, 0.5] for _ in range(d)])
+        self.input_domain = np.array([[-0.5, 0.6] for _ in range(d)])
         # self.input_domain = np.array([[-5.12, 5.12] for _ in range(d)])
 
     def get_param(self):
@@ -1811,6 +1811,42 @@ class Rastrigin:
         res = 10*d + np.sum(X**2 - 10 * np.cos(2*np.pi*X))
         return res
 
+
+class IllQuad:
+    name = 'Ill-Quad'
+    latex_formula = r'f(\mathbf{x})=\sum_{i=1}^{d}(x_i^2 - 10cos(2\pi x_i))'
+    latex_formula_dimension = r'd \in \mathbb{N}_{+}^{*}'
+    latex_formula_input_domain = r'x_i \in [-5.12, 5.12], \forall i \in \llbracket 1, d\rrbracket'
+    latex_formula_global_minimum = r'f(0, ..., 0) = 0'
+    continuous = True
+    convex = False
+    separable = True
+    differentiable = True
+    mutimodal = True
+    randomized_term = False
+    parametric = False
+
+    @classmethod
+    def is_dim_compatible(cls, d):
+        assert (d is None) or (isinstance(d, int) and (not d < 0)), "The dimension d must be None or a positive integer"
+        return  (d is None) or (d  > 0)
+
+    def __init__(self, d):
+        self.d = d
+        self.input_domain = np.array([[-0.5, 0.75] for _ in range(d)])
+        # self.input_domain = np.array([[-5.12, 5.12] for _ in range(d)])
+
+    def get_param(self):
+        return {}
+
+    def get_global_minimum(self, d):
+        X = np.array([0 for _ in range(d)])
+        return (X, self(X))
+
+    def __call__(self, X):
+        res = np.sum(X[1:]**2 + 100*X[:-1]**2)
+        return res
+    
 class Ridge:
     name = 'Ridge'
     latex_formula = r'f(\mathbf{x})=x_1 + \beta\left(\sum_{i=2}^{d}x_i^2\right)^\alpha'
@@ -1870,7 +1906,7 @@ class Rosenbrock:
 
     def __init__(self, d, a=1, b=100):
         self.d = d
-        self.input_domain = np.array([[-8, 10] for _ in range(d)])
+        self.input_domain =  np.array([[-2, 2],[-1, 3]])# np.array([[-5, 10] for _ in range(d)])
         self.a = a
         self.b = b
 
@@ -1883,7 +1919,7 @@ class Rosenbrock:
 
     def __call__(self, X):
         d = X.shape[0]
-        res = np.sum(np.abs(self.b*(X[1:] - X[:-1]**2)**2 + (self.a - X[:-1])**2))
+        res = np.sum(self.b*(X[1:] - X[:-1]**2)**2 + (self.a - X[:-1])**2)
         return res
 
 class RotatedHyperEllipsoid:

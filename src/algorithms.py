@@ -1,7 +1,7 @@
 import torch
 from tqdm.notebook import tqdm
 import numpy as np
-
+import functorch
 
 EPS_GLOBAL = 10**-18
 
@@ -102,7 +102,8 @@ def step_SGD(x, i, computeValue, lr):
 #     return run_algorithm(computeValue, step_SGD, epochs=epochs, d=d, lr =lr, x0=x0)
 
 
-def run_GD_teleport(computeValue, epochs=20, d=2, lr =1.0, x0=None, teleport_num=5):
+def run_GD_teleport(computeValue, epochs=20, d=2, lr =1.0, x0=None, teleport_num=-1, 
+                    teleport_tol = 10**-3, teleport_lr = 100.0, teleport_steps =5):
     torch.manual_seed(0)
     if x0 is None:
         x = torch.randn(d, requires_grad=True).double()*1
@@ -110,22 +111,31 @@ def run_GD_teleport(computeValue, epochs=20, d=2, lr =1.0, x0=None, teleport_num
         x = torch.clone(x0)
     np.random.seed(0)
 
-    idx = list(range(d))
     x_list = []
     y_list = []
     fval = []
     for ep in tqdm(range(epochs)):
-        np.random.shuffle(idx)
-        
-        grad = torch.autograd.grad(computeValue,x)[0] #,create_graph=True,retain_graph=True
+        func_out = computeValue(x)
+        grad = torch.autograd.grad(func_out,x)[0] #,create_graph=True,retain_graph=True
         with torch.no_grad():
             x.sub_(grad, alpha=lr)
-
+        if teleport_num != -1:
+            if (ep) % teleport_num == 0:
+                print("teleporting at iter ", ep)
+                for tpsteps in range(teleport_steps):
+                    # import pdb; pdb.set_trace()
+                    # Hv =functorch.jvp(functorch.grad(computeValue), (x,), (grad,))[1]
+                    Hv = torch.autograd.functional.hvp(computeValue,x,grad)[1]
+                    with torch.no_grad():
+                        x.add_(Hv, alpha=lr*teleport_lr)
+                        negstep = torch.inner(Hv,grad)/torch.inner(grad,grad)
+                        x.sub_(grad, alpha=lr*teleport_lr*negstep.item())
         fval.append(computeValue(x).item() )
         x_list.append(x[0].item())
         y_list.append(x[1].item())  
         if fval[-1] <= EPS_GLOBAL:
             break      
+    print("gd tp-",teleport_num," loss: ", fval[-1])
     return [x_list, y_list] , fval
 
 
@@ -160,7 +170,54 @@ def run_SGD(computeValue, epochs=20, d=2, lr =1.0, x0=None):
     return [x_list, y_list] , fval
 
 
+
 def run_newton(computeValue, epochs=20, d=2, lr =1.0, x0=None):
+
+    torch.manual_seed(0)
+    if x0 is None:
+        x = torch.randn(d, requires_grad=True).double()*1
+    else:   
+        x = torch.clone(x0)
+
+    np.random.seed(0)
+
+    idx = list(range(d))
+    x_list = []
+    y_list = []
+    fval = []
+    for ep in tqdm(range(epochs)):
+        np.random.shuffle(idx)
+        
+        grad = torch.zeros(d)
+        hess = np.zeros([d,d])
+        
+        for i in idx:
+            func_out = computeValue(x)
+            grad = torch.autograd.grad(func_out,x,create_graph=True,retain_graph=True)[0]
+            #populate the hessian for fi
+            hess = np.zeros([d,d])
+            for j in range(d):
+                Hj = torch.autograd.grad(grad[j],x,retain_graph=True)[0]
+                hess[:,j]=Hj
+            hess = 0.5*(hess + hess.T) #symmetrize in case of rounding errors?
+
+        for i in idx:
+            hess[i][i] = hess[i][i] + 10**-8
+
+        with torch.no_grad():
+            newton_step = torch.tensor(np.linalg.solve(hess,grad.numpy()))
+            # newton_step = torch.linalg.solve(grad, hess)
+            # newton_step = torch.tensor(np.linalg.inv(hess) @ grad.numpy())
+            x.sub_(newton_step, alpha=lr)
+        fval.append(func_out.item())     
+        x_list.append(x[0].item())
+        y_list.append(x[1].item())   
+        if fval[-1] <= EPS_GLOBAL:
+            break     
+        
+    return [x_list, y_list] , fval
+
+def run_newton_stoch(computeValue, epochs=20, d=2, lr =1.0, x0=None):
 
     torch.manual_seed(0)
     if x0 is None:

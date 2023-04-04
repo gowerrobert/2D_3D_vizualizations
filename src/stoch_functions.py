@@ -29,4 +29,4 @@ def Rastrigin_i(i,x):
 def RosenBrock_i(i,x):
     b = 100
     a = 1
-    return b * (x[i] - x[i - 1] ** 2) ** 2 + (a - x[i]) ** 2   
+    return b * torch.pow(x[i] - torch.pow(x[i - 1], 2) , 2) + torch.pow(a - x[i], 2)
