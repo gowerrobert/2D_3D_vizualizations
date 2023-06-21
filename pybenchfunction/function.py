@@ -1833,7 +1833,7 @@ class IllQuad:
 
     def __init__(self, d):
         self.d = d
-        self.input_domain = np.array([[-0.5, 0.75] for _ in range(d)])
+        self.input_domain = np.array([[-1.0, 3.0] for _ in range(d)])
         # self.input_domain = np.array([[-5.12, 5.12] for _ in range(d)])
 
     def get_param(self):

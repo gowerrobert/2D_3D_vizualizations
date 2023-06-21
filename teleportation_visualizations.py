@@ -34,7 +34,7 @@ def run_methods(x0, func, bench_func, stepsize=0.001, epochs=500, teleport_num=1
     plot_level_set_results(bench_func, results ) 
 
 d =2
-x0 = torch.tensor([-0.2, 0.6], requires_grad=True).double()
+x0 = torch.tensor([-0.1, 2.0], requires_grad=True).double()
 run_methods(x0, IllQuad,  bench.function.IllQuad(d), stepsize =0.007, epochs=500, teleport_num=100, teleport_lr=10**-1, teleport_steps=3)
 
 x0 = torch.tensor([-2.0, 2.0], requires_grad=True).double() # teleport_steps=1

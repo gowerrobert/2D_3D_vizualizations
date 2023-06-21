@@ -192,7 +192,7 @@ def run_newton(computeValue, epochs=20, d=2, lr =1.0, x0=None):
         hess = np.zeros([d,d])
         
         for i in idx:
-            func_out = computeValue(x)
+            func_out = computeValue(i,x)
             grad = torch.autograd.grad(func_out,x,create_graph=True,retain_graph=True)[0]
             #populate the hessian for fi
             hess = np.zeros([d,d])
