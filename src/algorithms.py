@@ -191,23 +191,19 @@ def run_newton(computeValue, epochs=20, d=2, lr =1.0, x0=None):
         grad = torch.zeros(d)
         hess = np.zeros([d,d])
         
-        for i in idx:
-            func_out = computeValue(i,x)
-            grad = torch.autograd.grad(func_out,x,create_graph=True,retain_graph=True)[0]
-            #populate the hessian for fi
-            hess = np.zeros([d,d])
-            for j in range(d):
-                Hj = torch.autograd.grad(grad[j],x,retain_graph=True)[0]
-                hess[:,j]=Hj
-            hess = 0.5*(hess + hess.T) #symmetrize in case of rounding errors?
+        func_out = computeValue(x)
+        grad = torch.autograd.grad(func_out,x,create_graph=True,retain_graph=True)[0]
+        hess = np.zeros([d,d])
+        for j in range(d):
+            Hj = torch.autograd.grad(grad[j],x,retain_graph=True)[0]
+            hess[:,j]=Hj
+        hess = 0.5*(hess + hess.T) #symmetrize in case of rounding errors?
 
         for i in idx:
             hess[i][i] = hess[i][i] + 10**-8
 
         with torch.no_grad():
             newton_step = torch.tensor(np.linalg.solve(hess,grad.numpy()))
-            # newton_step = torch.linalg.solve(grad, hess)
-            # newton_step = torch.tensor(np.linalg.inv(hess) @ grad.numpy())
             x.sub_(newton_step, alpha=lr)
         fval.append(func_out.item())     
         x_list.append(x[0].item())
@@ -218,7 +214,7 @@ def run_newton(computeValue, epochs=20, d=2, lr =1.0, x0=None):
     return [x_list, y_list] , fval
 
 def run_newton_stoch(computeValue, epochs=20, d=2, lr =1.0, x0=None):
-
+    
     torch.manual_seed(0)
     if x0 is None:
         x = torch.randn(d, requires_grad=True).double()*1
@@ -238,18 +234,14 @@ def run_newton_stoch(computeValue, epochs=20, d=2, lr =1.0, x0=None):
         hess = np.zeros([d,d])
         
         for i in idx:
-            funci  = lambda x: computeValue(i,x)
-            fi = computeValue(i,x)
-            grad_i = torch.autograd.grad(fi,x,create_graph=True,retain_graph=True)[0]
-            grad.add_(grad_i)
-            
+            func_out = computeValue(i,x)
+            grad = torch.autograd.grad(func_out,x,create_graph=True,retain_graph=True)[0]
             #populate the hessian for fi
-            hess_i = np.zeros([d,d])
+            hess = np.zeros([d,d])
             for j in range(d):
-                Hj = torch.autograd.grad(grad_i[j],x,retain_graph=True)[0]
-                hess_i[:,j]=Hj
-            hess_i = 0.5*(hess_i + hess_i.T) #symmetrize in case of rounding errors?
-            hess = hess + hess_i
+                Hj = torch.autograd.grad(grad[j],x,retain_graph=True)[0]
+                hess[:,j]=Hj
+            hess = 0.5*(hess + hess.T) #symmetrize in case of rounding errors?
 
         for i in idx:
             hess[i][i] = hess[i][i] + 10**-8
@@ -259,8 +251,7 @@ def run_newton_stoch(computeValue, epochs=20, d=2, lr =1.0, x0=None):
             # newton_step = torch.linalg.solve(grad, hess)
             # newton_step = torch.tensor(np.linalg.inv(hess) @ grad.numpy())
             x.sub_(newton_step, alpha=lr)
-        fnew = np.mean([computeValue(i,x).item() for i in range(d)])
-        fval.append(fnew)     
+        fval.append(func_out.item())     
         x_list.append(x[0].item())
         y_list.append(x[1].item())   
         if fval[-1] <= EPS_GLOBAL:
