@@ -1,16 +1,18 @@
 import torch
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 import numpy as np
 import functorch
 
 EPS_GLOBAL = 10**-18
 
-def run_algorithm(computeValue, step_function, epochs=20, d=2, lr =1.0, x0=None):
-    
+
+def run_algorithm(
+    computeValue, step_function, epochs=20, d=2, lr=1.0, x0=None
+):
     torch.manual_seed(0)
     if x0 is None:
-        x = torch.randn(d, requires_grad=True).double()*1
-    else:   
+        x = torch.randn(d, requires_grad=True).double() * 1
+    else:
         x = torch.clone(x0)
     np.random.seed(0)
 
@@ -20,10 +22,10 @@ def run_algorithm(computeValue, step_function, epochs=20, d=2, lr =1.0, x0=None)
     fval = []
     for ep in tqdm(range(epochs)):
         np.random.shuffle(idx)
-        
+
         for i in idx:
-            x  = step_function(x, i, computeValue,  lr)
-        fnew = np.mean([computeValue(i,x).item() for i in range(d)])
+            x = step_function(x, i, computeValue, lr)
+        fnew = np.mean([computeValue(i, x).item() for i in range(d)])
         if np.isnan(fnew):
             break
         fval.append(fnew)
@@ -31,83 +33,116 @@ def run_algorithm(computeValue, step_function, epochs=20, d=2, lr =1.0, x0=None)
         y_list.append(x[1].item())
         if fval[-1] <= EPS_GLOBAL:
             break
-        
-    return [x_list, y_list] , fval
+
+    return [x_list, y_list], fval
 
 
 def step_SP2plus(x, i, computeValue, lr, nosp1=True):
-    funci  = lambda x: computeValue(i,x)
-    fi = computeValue(i,x)
-    grad = torch.autograd.grad(fi,x,create_graph=True,retain_graph=True)[0]
-    hessvgrad = torch.autograd.functional.hvp(funci, x, grad, create_graph=True)[1]
+    funci = lambda x: computeValue(i, x)
+    fi = computeValue(i, x)
+    grad = torch.autograd.grad(fi, x, create_graph=True, retain_graph=True)[0]
+    hessvgrad = torch.autograd.functional.hvp(
+        funci, x, grad, create_graph=True
+    )[1]
     # print(hessvgrad.shape)
     # hessian_grad = torch.autograd.grad(grads, self.params, grad_outputs=grads)
     with torch.no_grad():
-        gradnormsqr = torch.norm(grad)**2
+        gradnormsqr = torch.norm(grad) ** 2
         # if gradnormsqr > 1e-18:
-        sps_step = fi/gradnormsqr
-        x.sub_(sps_step*grad, alpha = lr)
+        sps_step = fi / gradnormsqr
+        x.sub_(sps_step * grad, alpha=lr)
         # gdiffHvg = grad -hessvgrad*fi/gradnormsqr
         if nosp1:
-            gdiffHvg = torch.sub(grad, hessvgrad, alpha= sps_step)
+            gdiffHvg = torch.sub(grad, hessvgrad, alpha=sps_step)
             # gdiffHvg = [g - fi*hg/gradnormsqr for g,hg in zip(grad, hessvgrad)]   # Maybe need this instead?
-            if torch.norm(gdiffHvg)**2 > 1e-10:
-                x.sub_(0.5*(sps_step**2)*gdiffHvg*torch.dot(grad,gdiffHvg)/ (torch.norm(gdiffHvg)**2), alpha = lr)
-    return  x
+            if torch.norm(gdiffHvg) ** 2 > 1e-10:
+                x.sub_(
+                    0.5
+                    * (sps_step**2)
+                    * gdiffHvg
+                    * torch.dot(grad, gdiffHvg)
+                    / (torch.norm(gdiffHvg) ** 2),
+                    alpha=lr,
+                )
+    return x
 
-def run_SP2plus(computeValue, epochs=20, d=2, lr =1.0, x0=None, nosp1=True):  
+
+def run_SP2plus(computeValue, epochs=20, d=2, lr=1.0, x0=None, nosp1=True):
     if nosp1:
-        step_func = lambda x, i, computeValue, lr: step_SP2plus(x, i, computeValue, lr, nosp1=True)
+        step_func = lambda x, i, computeValue, lr: step_SP2plus(
+            x, i, computeValue, lr, nosp1=True
+        )
     else:
-        step_func = lambda x, i, computeValue, lr: step_SP2plus(x, i, computeValue, lr, nosp1=False)
-    return run_algorithm(computeValue, step_func, epochs=epochs, d=d, lr =lr, x0=x0)
+        step_func = lambda x, i, computeValue, lr: step_SP2plus(
+            x, i, computeValue, lr, nosp1=False
+        )
+    return run_algorithm(
+        computeValue, step_func, epochs=epochs, d=d, lr=lr, x0=x0
+    )
+
 
 def step_SP2(x, i, computeValue, lr, inner_steps):
-    funci  = lambda x: computeValue(i,x)
-    fi = computeValue(i,x)
-    grad = torch.autograd.grad(fi,x,create_graph=True,retain_graph=True)[0]
-    
+    funci = lambda x: computeValue(i, x)
+    fi = computeValue(i, x)
+    grad = torch.autograd.grad(fi, x, create_graph=True, retain_graph=True)[0]
+
     # hessian = torch.autograd.functional.hessian(pow_reducer, inputs)
     # print(hessvgrad.shape)
     # hessian_grad = torch.autograd.grad(grads, self.params, grad_outputs=grads)
     w = torch.clone(x)
     for j in range(inner_steps):
-        wdiff = torch.sub(w,x)
-        hessvgrad = torch.autograd.functional.hvp(funci, x, wdiff, create_graph=True)[1]
+        wdiff = torch.sub(w, x)
+        hessvgrad = torch.autograd.functional.hvp(
+            funci, x, wdiff, create_graph=True
+        )[1]
         with torch.no_grad():
-            q = fi + torch.dot(grad,wdiff) +0.5*torch.dot(wdiff,hessvgrad)
-            nablaq = torch.add(grad,hessvgrad)
+            q = fi + torch.dot(grad, wdiff) + 0.5 * torch.dot(wdiff, hessvgrad)
+            nablaq = torch.add(grad, hessvgrad)
             nablaqnorm = torch.norm(nablaq)
-            if nablaqnorm <1e-14:
+            if nablaqnorm < 1e-14:
                 break
-            w.sub_(nablaq , alpha = lr*q/nablaqnorm**2)
+            w.sub_(nablaq, alpha=lr * q / nablaqnorm**2)
     with torch.no_grad():
         # x = torch.clone(w)
         x = w
     return x
 
-def run_SP2(computeValue, epochs=20, d=2, lr =1.0, inner_steps = 10, x0=None):  
-    step_func = lambda x, i, computeValue, lr:  step_SP2(x, i, computeValue, lr, inner_steps= inner_steps)
-    return run_algorithm(computeValue, step_func, epochs=epochs, d=d, lr =lr, x0=x0)
+
+def run_SP2(computeValue, epochs=20, d=2, lr=1.0, inner_steps=10, x0=None):
+    step_func = lambda x, i, computeValue, lr: step_SP2(
+        x, i, computeValue, lr, inner_steps=inner_steps
+    )
+    return run_algorithm(
+        computeValue, step_func, epochs=epochs, d=d, lr=lr, x0=x0
+    )
+
 
 def step_SGD(x, i, computeValue, lr):
-    fi = computeValue(i,x)
-    grad = torch.autograd.grad(fi,x,create_graph=True,retain_graph=True)[0]
+    fi = computeValue(i, x)
+    grad = torch.autograd.grad(fi, x, create_graph=True, retain_graph=True)[0]
 
     with torch.no_grad():
-        x.sub_(grad, alpha=lr)    
+        x.sub_(grad, alpha=lr)
+
 
 # def run_SGD(computeValue, epochs=20, d=2, lr =1.0, x0=None):
 #     # import pdb; pdb.set_trace()
 #     return run_algorithm(computeValue, step_SGD, epochs=epochs, d=d, lr =lr, x0=x0)
 
 
-def run_GD_teleport(computeValue, epochs=20, d=2, lr =1.0, x0=None, teleport_num=-1, 
-                    teleport_tol = 10**-3, teleport_lr = 100.0, teleport_steps =5):
+def run_GD_teleport(
+    computeValue,
+    teleport_fn,
+    epochs=20,
+    d=2,
+    lr=1.0,
+    x0=None,
+    teleport_num=-1,
+):
     torch.manual_seed(0)
     if x0 is None:
-        x = torch.randn(d, requires_grad=True).double()*1
-    else:   
+        x = torch.randn(d, requires_grad=True).double() * 1
+    else:
         x = torch.clone(x0)
     np.random.seed(0)
 
@@ -116,35 +151,32 @@ def run_GD_teleport(computeValue, epochs=20, d=2, lr =1.0, x0=None, teleport_num
     fval = []
     for ep in tqdm(range(epochs)):
         func_out = computeValue(x)
-        grad = torch.autograd.grad(func_out,x)[0] #,create_graph=True,retain_graph=True
+        grad = torch.autograd.grad(func_out, x)[
+            0
+        ]  # ,create_graph=True,retain_graph=True
+        fval.append(computeValue(x).item())
+        x_list.append(x[0].item())
+        y_list.append(x[1].item())
+        if fval[-1] <= EPS_GLOBAL:
+            break
+
         with torch.no_grad():
             x.sub_(grad, alpha=lr)
+
         if teleport_num != -1:
             if (ep) % teleport_num == 0:
-                print("teleporting at iter ", ep)
-                for tpsteps in range(teleport_steps):
-                    # import pdb; pdb.set_trace()
-                    # Hv =functorch.jvp(functorch.grad(computeValue), (x,), (grad,))[1]
-                    Hv = torch.autograd.functional.hvp(computeValue,x,grad)[1]
-                    with torch.no_grad():
-                        x.add_(Hv, alpha=lr*teleport_lr)
-                        negstep = torch.inner(Hv,grad)/torch.inner(grad,grad)
-                        x.sub_(grad, alpha=lr*teleport_lr*negstep.item())
-        fval.append(computeValue(x).item() )
-        x_list.append(x[0].item())
-        y_list.append(x[1].item())  
-        if fval[-1] <= EPS_GLOBAL:
-            break      
-    print("gd tp-",teleport_num," loss: ", fval[-1])
-    return [x_list, y_list] , fval
+                # run teleport procedure
+                x = teleport_fn(x, computeValue)
+
+    print("gd tp-", teleport_num, " loss: ", fval[-1])
+    return [x_list, y_list], fval
 
 
-
-def run_SGD(computeValue, epochs=20, d=2, lr =1.0, x0=None):
+def run_SGD(computeValue, epochs=20, d=2, lr=1.0, x0=None):
     torch.manual_seed(0)
     if x0 is None:
-        x = torch.randn(d, requires_grad=True).double()*1
-    else:   
+        x = torch.randn(d, requires_grad=True).double() * 1
+    else:
         x = torch.clone(x0)
     np.random.seed(0)
 
@@ -154,29 +186,29 @@ def run_SGD(computeValue, epochs=20, d=2, lr =1.0, x0=None):
     fval = []
     for ep in tqdm(range(epochs)):
         np.random.shuffle(idx)
-        
+
         for i in idx:
-            fi = computeValue(i,x)
-            grad = torch.autograd.grad(fi,x)[0] #,create_graph=True,retain_graph=True
+            fi = computeValue(i, x)
+            grad = torch.autograd.grad(fi, x)[
+                0
+            ]  # ,create_graph=True,retain_graph=True
 
             with torch.no_grad():
                 x.sub_(grad, alpha=lr)
 
-        fval.append(np.mean([computeValue(i,x).item() for i in range(d)]))
+        fval.append(np.mean([computeValue(i, x).item() for i in range(d)]))
         x_list.append(x[0].item())
-        y_list.append(x[1].item())  
+        y_list.append(x[1].item())
         if fval[-1] <= EPS_GLOBAL:
-            break      
-    return [x_list, y_list] , fval
+            break
+    return [x_list, y_list], fval
 
 
-
-def run_newton(computeValue, epochs=20, d=2, lr =1.0, x0=None):
-
+def run_newton(computeValue, epochs=20, d=2, lr=1.0, x0=None):
     torch.manual_seed(0)
     if x0 is None:
-        x = torch.randn(d, requires_grad=True).double()*1
-    else:   
+        x = torch.randn(d, requires_grad=True).double() * 1
+    else:
         x = torch.clone(x0)
 
     np.random.seed(0)
@@ -187,38 +219,42 @@ def run_newton(computeValue, epochs=20, d=2, lr =1.0, x0=None):
     fval = []
     for ep in tqdm(range(epochs)):
         np.random.shuffle(idx)
-        
+
         grad = torch.zeros(d)
-        hess = np.zeros([d,d])
-        
+        hess = np.zeros([d, d])
+
         func_out = computeValue(x)
-        grad = torch.autograd.grad(func_out,x,create_graph=True,retain_graph=True)[0]
-        hess = np.zeros([d,d])
+        grad = torch.autograd.grad(
+            func_out, x, create_graph=True, retain_graph=True
+        )[0]
+
+        fval.append(func_out.item())
+        x_list.append(x[0].item())
+        y_list.append(x[1].item())
+        if fval[-1] <= EPS_GLOBAL:
+            break
+
+        hess = np.zeros([d, d])
         for j in range(d):
-            Hj = torch.autograd.grad(grad[j],x,retain_graph=True)[0]
-            hess[:,j]=Hj
-        hess = 0.5*(hess + hess.T) #symmetrize in case of rounding errors?
+            Hj = torch.autograd.grad(grad[j], x, retain_graph=True)[0]
+            hess[:, j] = Hj
+        hess = 0.5 * (hess + hess.T)  # symmetrize in case of rounding errors?
 
         for i in idx:
             hess[i][i] = hess[i][i] + 10**-8
 
         with torch.no_grad():
-            newton_step = torch.tensor(np.linalg.solve(hess,grad.numpy()))
+            newton_step = torch.tensor(np.linalg.solve(hess, grad.numpy()))
             x.sub_(newton_step, alpha=lr)
-        fval.append(func_out.item())     
-        x_list.append(x[0].item())
-        y_list.append(x[1].item())   
-        if fval[-1] <= EPS_GLOBAL:
-            break     
-        
-    return [x_list, y_list] , fval
 
-def run_newton_stoch(computeValue, epochs=20, d=2, lr =1.0, x0=None):
-    
+    return [x_list, y_list], fval
+
+
+def run_newton_stoch(computeValue, epochs=20, d=2, lr=1.0, x0=None):
     torch.manual_seed(0)
     if x0 is None:
-        x = torch.randn(d, requires_grad=True).double()*1
-    else:   
+        x = torch.randn(d, requires_grad=True).double() * 1
+    else:
         x = torch.clone(x0)
 
     np.random.seed(0)
@@ -229,45 +265,58 @@ def run_newton_stoch(computeValue, epochs=20, d=2, lr =1.0, x0=None):
     fval = []
     for ep in tqdm(range(epochs)):
         np.random.shuffle(idx)
-        
+
         grad = torch.zeros(d)
-        hess = np.zeros([d,d])
-        
+        hess = np.zeros([d, d])
+
         for i in idx:
-            func_out = computeValue(i,x)
-            grad = torch.autograd.grad(func_out,x,create_graph=True,retain_graph=True)[0]
-            #populate the hessian for fi
-            hess = np.zeros([d,d])
+            func_out = computeValue(i, x)
+            grad = torch.autograd.grad(
+                func_out, x, create_graph=True, retain_graph=True
+            )[0]
+            # populate the hessian for fi
+            hess = np.zeros([d, d])
             for j in range(d):
-                Hj = torch.autograd.grad(grad[j],x,retain_graph=True)[0]
-                hess[:,j]=Hj
-            hess = 0.5*(hess + hess.T) #symmetrize in case of rounding errors?
+                Hj = torch.autograd.grad(grad[j], x, retain_graph=True)[0]
+                hess[:, j] = Hj
+            hess = 0.5 * (
+                hess + hess.T
+            )  # symmetrize in case of rounding errors?
 
         for i in idx:
             hess[i][i] = hess[i][i] + 10**-8
 
         with torch.no_grad():
-            newton_step = torch.tensor(np.linalg.solve(hess,grad.numpy()))
+            newton_step = torch.tensor(np.linalg.solve(hess, grad.numpy()))
             # newton_step = torch.linalg.solve(grad, hess)
             # newton_step = torch.tensor(np.linalg.inv(hess) @ grad.numpy())
             x.sub_(newton_step, alpha=lr)
-        fval.append(func_out.item())     
+        fval.append(func_out.item())
         x_list.append(x[0].item())
-        y_list.append(x[1].item())   
+        y_list.append(x[1].item())
         if fval[-1] <= EPS_GLOBAL:
-            break     
-        
-    return [x_list, y_list] , fval
+            break
+
+    return [x_list, y_list], fval
 
 
-def adam(computeValue, epochs=20, d=2, lr =0.1,  x0=None, beta1 =0.9, beta2 =0.999, eps = 10**(-8.0)):
+def adam(
+    computeValue,
+    epochs=20,
+    d=2,
+    lr=0.1,
+    x0=None,
+    beta1=0.9,
+    beta2=0.999,
+    eps=10 ** (-8.0),
+):
     torch.manual_seed(0)
     if x0 is None:
-        x = torch.randn(d, requires_grad=True).double()*1
-    else:   
+        x = torch.randn(d, requires_grad=True).double() * 1
+    else:
         x = torch.clone(x0)
     m = torch.zeros_like(x)
-                    # Exponential moving average of squared gradient values
+    # Exponential moving average of squared gradient values
     v = torch.zeros_like(x)
     np.random.seed(0)
 
@@ -279,8 +328,10 @@ def adam(computeValue, epochs=20, d=2, lr =0.1,  x0=None, beta1 =0.9, beta2 =0.9
         np.random.shuffle(idx)
         count = 1
         for i in idx:
-            fi = computeValue(i,x)
-            grad = torch.autograd.grad(fi,x)[0] #,create_graph=True,retain_graph=True
+            fi = computeValue(i, x)
+            grad = torch.autograd.grad(fi, x)[
+                0
+            ]  # ,create_graph=True,retain_graph=True
 
             with torch.no_grad():
                 # m = beta1*m + (1-beta1)*grad
@@ -289,23 +340,22 @@ def adam(computeValue, epochs=20, d=2, lr =0.1,  x0=None, beta1 =0.9, beta2 =0.9
                 v.mul_(beta2).addcmul_(grad, grad.conj(), value=1 - beta2)
                 # m.mul_(beta1).add_(1 - beta1, grad)
                 # v.mul_(beta2).addcmul_(1 - beta2, grad, grad)
-                iter_count= d*ep +count
-                bias_correction1 = 1 - beta1 ** iter_count
-                bias_correction2 = 1 - beta2 ** iter_count
+                iter_count = d * ep + count
+                bias_correction1 = 1 - beta1**iter_count
+                bias_correction2 = 1 - beta2**iter_count
                 denom = (v.sqrt() / bias_correction2).add_(eps)
                 step_size = lr / bias_correction1
                 x.addcdiv_(m, denom, value=-step_size)
                 # step_size = lr * np.sqrt(bias_correction2) / bias_correction1
                 # x.sub_(m, alpha=step_size)
-                count = count+1
+                count = count + 1
 
-        fval.append(np.mean([computeValue(i,x).item() for i in range(d)]))
+        fval.append(np.mean([computeValue(i, x).item() for i in range(d)]))
         x_list.append(x[0].item())
-        y_list.append(x[1].item())  
+        y_list.append(x[1].item())
         if fval[-1] <= EPS_GLOBAL:
-            break      
-    return [x_list, y_list] , fval
-
+            break
+    return [x_list, y_list], fval
 
 
 # def adam(loss, regularizer, data, label, lr, reg, epoch, x_0, tol=None,
