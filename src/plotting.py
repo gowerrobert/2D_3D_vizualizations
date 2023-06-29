@@ -11,10 +11,16 @@ markers = ["x", "o", "2", "P", "s", "v"]
 colours = ["g", "b", "y", "m", "tab:pink", "r"]
 
 
-def plot_level_set_results(bench_function, results, show=True):
-    plt.figure()
+def plot_level_set_results(
+    bench_function,
+    results,
+    show=True,
+    logscale=False,
+):
 
-    bench.plot_2d(bench_function, n_space=100, ax=None, show=False)
+    bench.plot_2d(
+        bench_function, n_space=100, ax=None, show=False, logscale=logscale
+    )
     X_domain, Y_domain = bench_function.input_domain
     X_min, minimum = bench_function.get_global_minimum(2)
     plt.plot(X_min[0], X_min[1], "*", markersize=10, color="yellow")
@@ -35,6 +41,7 @@ def plot_level_set_results(bench_function, results, show=True):
             color=cl,
             marker=mk,
         )
+        plt.plot(x_list[0][1], x_list[1][1], "X", markersize=10, color=cl)
     plt.xlim(X_domain)
     plt.ylim(Y_domain)
     plt.tight_layout()

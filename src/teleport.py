@@ -13,6 +13,7 @@ def linear_sqp(
     obj_fn,
     max_steps,
     eta,
+    normalize=True,
     verbose=False,
 ):
     """Teleport by solving successive linear approximations.
@@ -47,11 +48,18 @@ def linear_sqp(
                     f"Iteration {t}/{max_steps}: Function Diff: {f_diff}, Grad norm: {grad_norm.item()}"
                 )
 
-            x.add_(Hv, alpha=eta)
             denom = torch.inner(grad, grad)
 
-            negstep = (f_diff - torch.inner(Hv, grad)) / denom
-            x.add_(grad, alpha=eta * negstep.item())
+            eta_step = eta
+            if normalize:
+                eta_step = eta / denom
+
+            x.add_(Hv, alpha=eta_step)
+
+            negstep = (f_diff - eta_step * torch.inner(Hv, grad)) / denom
+
+            # unnecessary step-size
+            x.add_(grad, alpha=negstep.item())
 
     return x
 

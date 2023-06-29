@@ -40,16 +40,17 @@ def run_methods(
     epochs=500,
     teleport_num=100,
     teleport_lr=10**-1,
-    al_lr=10**-1,
-    al_penalty=10,
+    teleport_lr_norm=10**-1,
     teleport_steps=3,
+    logscale=False,
 ):
     # teleport using linear SQP.
     sqp_teleport = partial(
         linear_sqp,
         max_steps=teleport_steps,
-        eta=teleport_lr * stepsize,
-        verbose=False,
+        eta=teleport_lr,
+        verbose=True,
+        normalize=False,
     )
     t0 = time.perf_counter()
     gdtp_x_list, gdtp_fval = run_GD_teleport(
@@ -63,25 +64,44 @@ def run_methods(
     )
     gdtp_time = time.perf_counter() - t0
 
-    # teleport using primal-dual subgrad method
-    primal_dual_teleport = partial(
-        primal_dual_subgrad,
+    sqp_teleport_norm = partial(
+        linear_sqp,
         max_steps=teleport_steps,
-        eta=1e-4,
-        dual_eta=1e2,
+        eta=teleport_lr_norm,
         verbose=True,
+        normalize=True,
     )
     t0 = time.perf_counter()
-    pdstp_x_list, pdstp_fval = run_GD_teleport(
+    gd_normtp_x_list, gd_normtp_fval = run_GD_teleport(
         func,
-        primal_dual_teleport,
+        sqp_teleport_norm,
         epochs=epochs,
         x0=x0,
         d=d,
         lr=stepsize,
         teleport_num=teleport_num,
     )
-    pdstp_time = time.perf_counter() - t0
+    gd_normtp_time = time.perf_counter() - t0
+
+    # teleport using primal-dual subgrad method
+    # primal_dual_teleport = partial(
+    #     primal_dual_subgrad,
+    #     max_steps=teleport_steps,
+    #     eta=1e-4,
+    #     dual_eta=1e2,
+    #     verbose=False,
+    # )
+    # t0 = time.perf_counter()
+    # pdstp_x_list, pdstp_fval = run_GD_teleport(
+    #     func,
+    #     primal_dual_teleport,
+    #     epochs=epochs,
+    #     x0=x0,
+    #     d=d,
+    #     lr=stepsize,
+    #     teleport_num=teleport_num,
+    # )
+    # pdstp_time = time.perf_counter() - t0
 
     # teleport using penalty method
     # al_teleport = partial(
@@ -141,57 +161,59 @@ def run_methods(
     t0 = time.perf_counter()
     results = {
         "SQP_tp": (gdtp_time, gdtp_fval, gdtp_x_list),
-        "PDS_tp": (pdstp_time, pdstp_fval, pdstp_x_list),
+        "SQP_tp": (gdtp_time, gdtp_fval, gdtp_x_list),
+        "SQP_Norm_tp": (gd_normtp_time, gd_normtp_fval, gd_normtp_x_list),
+        # "PDS_tp": (pdstp_time, pdstp_fval, pdstp_x_list),
         # "AL_tp": (altp_time, altp_fval, altp_x_list),
         # "Pen_tp": (pentp_time, pentp_fval, pentp_x_list),
         "GD": (gd_time, gd_fval, gd_x_list),
         "Newton": (newt_time, newt_fval, newt_x_list),
     }
     plot_function_values(bench_func, results, timeplot=False, show=False)
-    plot_level_set_results(bench_func, results, show=False)
+    plot_level_set_results(bench_func, results, show=False, logscale=logscale)
 
 
-teleport_steps = 50
+teleport_steps = 100
 
 d = 2
+lr = 1
 x0 = torch.tensor([-0.1, 2.0], requires_grad=True).double()
 run_methods(
     x0,
     IllQuad,
     bench.function.IllQuad(d),
-    stepsize=0.007,
+    stepsize=lr,
     epochs=500,
     teleport_num=1000,
-    teleport_lr=10**-1,
-    al_lr=1e-4,
-    al_penalty=100,
+    teleport_lr=1e-3,
+    teleport_lr_norm=1,
     teleport_steps=teleport_steps,
 )
 
-# x0 = torch.tensor([-2.0, 2.0], requires_grad=True).double()  # teleport_steps=1
-# run_methods(
-#     x0,
-#     Rosenbrock,
-#     bench.function.Rosenbrock(d),
-#     stepsize=0.00125,
-#     epochs=5000,
-#     teleport_num=10000,
-#     teleport_lr=10**-3,
-#     al_lr=1e-8,
-#     al_penalty=1000,
-#     teleport_steps=teleport_steps,
-# )
+teleport_steps = 500
+x0 = torch.tensor([-2.0, 2.0], requires_grad=True).double()  # teleport_steps=1
+run_methods(
+    x0,
+    Rosenbrock,
+    bench.function.Rosenbrock(d),
+    stepsize=lr,
+    epochs=5000,
+    teleport_num=10000,
+    teleport_lr=10**-5,
+    teleport_lr_norm=10000,
+    teleport_steps=teleport_steps,
+    logscale=True,
+)
 
-# x0 = torch.tensor([-0.2, 0.5], requires_grad=True).double()  # teleport_steps=5
-# run_methods(
-#     x0,
-#     Rastrigin,
-#     bench.function.Rastrigin(d),
-#     stepsize=0.0005,
-#     epochs=100,
-#     teleport_num=1000,
-#     teleport_lr=10**0,
-#     al_lr=1e-4,
-#     al_penalty=1,
-#     teleport_steps=teleport_steps,
-# )
+x0 = torch.tensor([-0.2, 0.5], requires_grad=True).double()  # teleport_steps=5
+run_methods(
+    x0,
+    Rastrigin,
+    bench.function.Rastrigin(d),
+    stepsize=1,
+    epochs=100,
+    teleport_num=1000,
+    teleport_lr=1e-5,
+    teleport_lr_norm=1e-2,
+    teleport_steps=teleport_steps,
+)

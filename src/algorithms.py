@@ -6,6 +6,11 @@ import functorch
 EPS_GLOBAL = 10**-18
 
 
+def armijo_cond(f_next, f, grad, d, alpha=0.5):
+    """Check Armijo condition."""
+    return f_next <= f + alpha * grad @ d
+
+
 def run_algorithm(
     computeValue, step_function, epochs=20, d=2, lr=1.0, x0=None
 ):
@@ -138,6 +143,7 @@ def run_GD_teleport(
     lr=1.0,
     x0=None,
     teleport_num=-1,
+    beta=0.8,
 ):
     torch.manual_seed(0)
     if x0 is None:
@@ -149,24 +155,47 @@ def run_GD_teleport(
     x_list = []
     y_list = []
     fval = []
+    func_out = computeValue(x)
+    fval.append(func_out.item())
+    x_list.append(x[0].item())
+    y_list.append(x[1].item())
+
     for ep in tqdm(range(epochs)):
-        func_out = computeValue(x)
-        grad = torch.autograd.grad(func_out, x)[
-            0
-        ]  # ,create_graph=True,retain_graph=True
-        fval.append(computeValue(x).item())
-        x_list.append(x[0].item())
-        y_list.append(x[1].item())
         if fval[-1] <= EPS_GLOBAL:
             break
-
-        with torch.no_grad():
-            x.sub_(grad, alpha=lr)
 
         if teleport_num != -1:
             if (ep) % teleport_num == 0:
                 # run teleport procedure
                 x = teleport_fn(x, computeValue)
+
+                func_out = computeValue(x)
+                fval.append(computeValue(x).item())
+                x_list.append(x[0].item())
+                y_list.append(x[1].item())
+
+        func_out = computeValue(x)
+        grad = torch.autograd.grad(func_out, x)[
+            0
+        ]  # ,create_graph=True,retain_graph=True
+
+        with torch.no_grad():
+            x_next = x.sub(grad, alpha=lr)
+            f_next = computeValue(x_next)
+
+            while not armijo_cond(f_next, func_out, grad, -lr * grad):
+                lr = lr * beta
+                x_next = x.sub(grad, alpha=lr)
+                f_next = computeValue(x_next)
+
+            x.sub_(grad, alpha=lr)
+
+            # try to increase step-size.
+            lr = lr / beta
+
+        fval.append(func_out.item())
+        x_list.append(x[0].item())
+        y_list.append(x[1].item())
 
     print("gd tp-", teleport_num, " loss: ", fval[-1])
     return [x_list, y_list], fval
