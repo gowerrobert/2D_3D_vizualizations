@@ -184,3 +184,70 @@ def penalty_method(
 
 def identity(x, obj_fn):
     return x
+
+
+def primal_dual_subgrad(
+    x,
+    obj_fn,
+    max_steps,
+    eta,
+    dual_eta,
+    verbose=False,
+):
+    """Teleport using augmented Lagrangian method.
+
+    Params:
+        x: the starting point for optimization.
+        obj_fn: callable function which evaluates the objective.
+            Must support backward passes.
+        max_steps: the maximum number of steps to run the augmented Lagrangian
+            method.
+        max_inner_steps: the maximum number of steps to run gradient descent
+            when minimizing the augmented Lagrangian.
+        inner_tol: the tolerance for terminating the inner optimization
+            method.
+        mu: the penalty strength.
+        eta: the step-size for the inner optimization method.
+        verbose: whether or not to print iteration statistics.
+
+    Returns:
+        x: approximate solution to teleportation problem.
+    """
+    # level set
+    f0 = obj_fn(x).item()
+
+    # dual parameters
+    lam = 0
+
+    # deviation from level set
+    f_diff = 0
+
+    func_out = obj_fn(x)
+    for t in tqdm(range(max_steps)):
+        # minimize augmented Lagrangian to evaluate primal update
+
+        grad = torch.autograd.grad(func_out, x)[0]
+
+        Hv = torch.autograd.functional.hvp(obj_fn, x, grad)[1]
+
+        with torch.no_grad():
+            grad = -lam * grad - Hv
+            grad_norm = grad @ grad
+
+            if verbose:
+                tqdm.write(
+                    f"Iteration {t}/{max_steps}: Function Diff: {f_diff}, Grad norm: {grad_norm.item()}, Lambda: {lam}"
+                )
+
+            # gradient descent step
+            x.sub_(grad, alpha=eta / (t + 1))
+
+        func_out = obj_fn(x)
+
+        with torch.no_grad():
+            f_diff = f0 - func_out.item()
+
+            # gradient ascent step
+            lam = lam + (dual_eta / (t + 1)) * f_diff
+
+    return x
