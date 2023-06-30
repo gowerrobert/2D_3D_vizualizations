@@ -8,6 +8,36 @@ from tqdm import tqdm
 import numpy as np
 
 
+def try_update(
+    x,
+    Hv,
+    vHv,
+    denom,
+    grad,
+    f_diff,
+    eta,
+    normalize=False,
+    allow_sublevel=False,
+):
+    with torch.no_grad():
+        eta_step = eta
+        if normalize:
+            eta_step = eta / denom
+
+        x.add_(Hv, alpha=eta_step)
+
+        if allow_sublevel and eta_step * vHv - f_diff <= 0:
+            # skip projection since step is inside half-space.
+            tqdm.write("Skipping projection")
+            return x
+
+        negstep = (f_diff - eta_step * vHv) / denom
+
+        x.add_(grad, alpha=negstep.item())
+
+    return x
+
+
 def linear_sqp(
     x,
     obj_fn,
@@ -15,6 +45,7 @@ def linear_sqp(
     eta,
     normalize=False,
     allow_sublevel=False,
+    line_search=False,
     verbose=False,
 ):
     """Teleport by solving successive linear approximations.
@@ -41,31 +72,94 @@ def linear_sqp(
         Hv = torch.autograd.functional.hvp(obj_fn, x, grad)[1]
 
         with torch.no_grad():
-            f_diff = f0 - func_out.item()
+            f_diff = f0 - func_out
+            grad_norm = grad @ grad
 
             if verbose:
-                grad_norm = grad @ grad
                 tqdm.write(
-                    f"Iteration {t}/{max_steps}: Function Diff: {f_diff}, Grad norm: {grad_norm.item()}"
+                    f"Iteration {t}/{max_steps}: Function Diff: {f_diff.item()}, Grad norm: {grad_norm.item()}"
                 )
 
-            denom = torch.inner(grad, grad)
-
-            eta_step = eta
-            if normalize:
-                eta_step = eta / denom
-
             vHv = torch.inner(Hv, grad)
-            x.add_(Hv, alpha=eta_step)
 
-            if allow_sublevel and eta_step * vHv - f_diff <= 0:
-                # skip projection since step is inside half-space.
-                tqdm.write("Skipping projection")
-                continue
+            x_old = x.clone()
+            x = try_update(
+                x,
+                Hv,
+                vHv,
+                grad_norm,
+                grad,
+                f_diff,
+                eta,
+                normalize=normalize,
+                allow_sublevel=allow_sublevel,
+            )
 
-            negstep = (f_diff - eta_step * vHv) / denom
+        if line_search:
+            f_next = obj_fn(x)
+            g_next = torch.autograd.grad(f_next, x)[0]
+            f_diff_next = f0 - f_next
+            if normalize:
+                mu = 1
+                LHS = -torch.log(g_next @ g_next) + 2 * mu * torch.abs(
+                    f_diff_next
+                )
+                RHS = (
+                    -torch.log(grad_norm)
+                    + 2 * mu * torch.abs(f_diff)
+                    - (mu * torch.sign(f_diff) * grad + Hv / grad_norm)
+                    @ (x - x_old)
+                )
+            else:
+                mu = 1e3
+                LHS = -g_next @ g_next + 2 * mu * torch.abs(f_diff_next)
+                RHS = (
+                    -grad_norm
+                    + 2 * mu * torch.abs(f_diff)
+                    - (mu * torch.sign(f_diff) * grad + Hv) @ (x - x_old)
+                )
 
-            x.add_(grad, alpha=negstep.item())
+            while LHS > RHS:
+                eta = eta * 0.8
+                print(eta)
+                # reset
+                x[:] = x_old
+                # try again
+                x = try_update(
+                    x,
+                    Hv,
+                    vHv,
+                    grad_norm,
+                    grad,
+                    f_diff,
+                    eta,
+                    normalize=normalize,
+                    allow_sublevel=allow_sublevel,
+                )
+                f_next = obj_fn(x)
+                g_next = torch.autograd.grad(f_next, x)[0]
+                f_diff_next = f0 - f_next
+
+                if normalize:
+                    LHS = -torch.log(g_next @ g_next) + 2 * mu * torch.abs(
+                        f_diff_next
+                    )
+                    RHS = (
+                        -torch.log(grad_norm)
+                        + 2 * mu * torch.abs(f_diff)
+                        - (mu * torch.sign(f_diff) * grad + Hv / grad_norm)
+                        @ (x - x_old)
+                    )
+                else:
+                    LHS = -g_next @ g_next + 2 * mu * torch.abs(f_diff_next)
+                    RHS = (
+                        -grad_norm
+                        + 2 * mu * torch.abs(f_diff)
+                        - (mu * torch.sign(f_diff) * grad + Hv) @ (x - x_old)
+                    )
+
+            # try to increase step-size
+            eta = eta * 1.25
 
     return x
 
