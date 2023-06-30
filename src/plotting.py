@@ -17,7 +17,6 @@ def plot_level_set_results(
     show=True,
     logscale=False,
 ):
-
     bench.plot_2d(
         bench_function, n_space=100, ax=None, show=False, logscale=logscale
     )

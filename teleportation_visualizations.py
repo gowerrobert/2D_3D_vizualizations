@@ -83,6 +83,25 @@ def run_methods(
     )
     gd_normtp_time = time.perf_counter() - t0
 
+    sqp_teleport_sub = partial(
+        linear_sqp,
+        max_steps=teleport_steps,
+        eta=teleport_lr,
+        verbose=True,
+        allow_sublevel=True,
+    )
+    t0 = time.perf_counter()
+    gd_sub_tp_x_list, gd_sub_tp_fval = run_GD_teleport(
+        func,
+        sqp_teleport_sub,
+        epochs=epochs,
+        x0=x0,
+        d=d,
+        lr=stepsize,
+        teleport_num=teleport_num,
+    )
+    gd_sub_tp_time = time.perf_counter() - t0
+
     # teleport using primal-dual subgrad method
     # primal_dual_teleport = partial(
     #     primal_dual_subgrad,
@@ -161,8 +180,8 @@ def run_methods(
     t0 = time.perf_counter()
     results = {
         "SQP_tp": (gdtp_time, gdtp_fval, gdtp_x_list),
-        "SQP_tp": (gdtp_time, gdtp_fval, gdtp_x_list),
         "SQP_Norm_tp": (gd_normtp_time, gd_normtp_fval, gd_normtp_x_list),
+        "SQP_Sub_tp": (gd_sub_tp_time, gd_sub_tp_fval, gd_sub_tp_x_list),
         # "PDS_tp": (pdstp_time, pdstp_fval, pdstp_x_list),
         # "AL_tp": (altp_time, altp_fval, altp_x_list),
         # "Pen_tp": (pentp_time, pentp_fval, pentp_x_list),

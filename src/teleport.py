@@ -13,7 +13,8 @@ def linear_sqp(
     obj_fn,
     max_steps,
     eta,
-    normalize=True,
+    normalize=False,
+    allow_sublevel=False,
     verbose=False,
 ):
     """Teleport by solving successive linear approximations.
@@ -54,11 +55,16 @@ def linear_sqp(
             if normalize:
                 eta_step = eta / denom
 
+            vHv = torch.inner(Hv, grad)
             x.add_(Hv, alpha=eta_step)
 
-            negstep = (f_diff - eta_step * torch.inner(Hv, grad)) / denom
+            if allow_sublevel and eta_step * vHv - f_diff <= 0:
+                # skip projection since step is inside half-space.
+                tqdm.write("Skipping projection")
+                continue
 
-            # unnecessary step-size
+            negstep = (f_diff - eta_step * vHv) / denom
+
             x.add_(grad, alpha=negstep.item())
 
     return x
