@@ -10,12 +10,12 @@ import numpy as np
 alpha = 1e-3
 beta = 0.8
 beta_inv = 1.25
-tol = 1e-6
+tol = 1e-10
 max_tries = 100
 mu_scale = 10
 
 
-def linear_sqp(
+def slp(
     x,
     obj_fn,
     max_steps,
@@ -89,7 +89,7 @@ def linear_sqp(
             proj = vHv_g * grad - Hv
             if proj @ proj <= tol and penalty_fn(f_diff) <= tol:
                 tqdm.write(
-                    "KKT conditions approximations satisfied. Terminating."
+                    "KKT conditions approximately satisfied. Terminating SLP procedure."
                 )
                 return x
 
@@ -144,7 +144,7 @@ def linear_sqp(
                     x[:] = x_prev[:]
 
         # report if line-search failed
-        if t == max_tries - 1:
+        if i == max_tries - 1:
             tqdm.write(
                 "WARNING: Line-search failed to return feasible step-size."
             )

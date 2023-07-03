@@ -7,7 +7,7 @@ font = {"size": 12}
 matplotlib.rc("font", **font)
 # markers = {"SP2plus": "x", "SP2": "o", "SGD":"2" , "SP":"P", "Adam":"s", "Newton":"v"}
 # colours = {"SP2plus": "g", "SP2": "b", "SGD":"y" , "SP":"m", "Adam":"tab:pink", "Newton":"r"}
-markers = ["x", "o", "2", "P", "s", "v"]
+markers = ["D", "o", "2", "P", "s", "v"]
 colours = ["g", "b", "y", "m", "tab:pink", "r"]
 
 
@@ -40,7 +40,9 @@ def plot_level_set_results(
             color=cl,
             marker=mk,
         )
-        plt.plot(x_list[0][1], x_list[1][1], "X", markersize=10, color=cl)
+        if "SLP" in key:
+            plt.plot(x_list[0][1], x_list[1][1], "X", markersize=10, color=cl)
+
     plt.xlim(X_domain)
     plt.ylim(Y_domain)
     plt.tight_layout()
