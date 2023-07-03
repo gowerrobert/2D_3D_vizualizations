@@ -4,6 +4,7 @@ import numpy as np
 import functorch
 
 EPS_GLOBAL = 10**-18
+max_tries = 100
 
 
 def armijo_cond(f_next, f, grad, d, alpha=0.5):
@@ -183,7 +184,10 @@ def run_GD_teleport(
             x_next = x.sub(grad, alpha=lr)
             f_next = computeValue(x_next)
 
-            while not armijo_cond(f_next, func_out, grad, -lr * grad):
+            for i in range(max_tries):
+                if armijo_cond(f_next, func_out, grad, -lr * grad):
+                    break
+
                 lr = lr * beta
                 x_next = x.sub(grad, alpha=lr)
                 f_next = computeValue(x_next)

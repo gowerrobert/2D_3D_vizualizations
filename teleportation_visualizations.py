@@ -20,7 +20,15 @@ from src.stoch_functions import (
     Rastrigin_i,
     RosenBrock_i,
 )
-from src.torch_functions import Rosenbrock, Rastrigin, IllQuad
+from src.torch_functions import (
+    Rosenbrock,
+    Rastrigin,
+    IllQuad,
+    Booth,
+    BukinN6,
+    GoldsteinPrice,
+    Himmelblau,
+)
 from src.teleport import (
     slp,
     al_method,
@@ -108,7 +116,7 @@ def run_methods(
     sqp_teleport_ls = partial(
         slp,
         max_steps=teleport_steps,
-        lam=1,
+        lam=1e-2,
         verbose=True,
         line_search=True,
     )
@@ -154,42 +162,100 @@ teleport_steps = 500
 
 d = 2
 lr = 1
-x0 = torch.tensor([-0.1, 2.0], requires_grad=True).double()
-run_methods(
-    x0,
-    IllQuad,
-    bench.function.IllQuad(d),
-    stepsize=lr,
-    epochs=500,
-    teleport_num=1000,
-    teleport_lr=1e-3,
-    teleport_lr_norm=1,
-    teleport_steps=teleport_steps,
-)
+# x0 = torch.tensor([-0.1, 2.0], requires_grad=True).double()
+# run_methods(
+#     x0,
+#     IllQuad,
+#     bench.function.IllQuad(d),
+#     stepsize=lr,
+#     epochs=500,
+#     teleport_num=1000,
+#     teleport_lr=1e-3,
+#     teleport_lr_norm=1,
+#     teleport_steps=teleport_steps,
+# )
 
-x0 = torch.tensor([-2.0, 2.0], requires_grad=True).double()  # teleport_steps=1
-run_methods(
-    x0,
-    Rosenbrock,
-    bench.function.Rosenbrock(d),
-    stepsize=lr,
-    epochs=5000,
-    teleport_num=10000,
-    teleport_lr=10**-5,
-    teleport_lr_norm=10000,
-    teleport_steps=teleport_steps,
-    logscale=True,
-)
+# x0 = torch.tensor([-2.0, 2.0], requires_grad=True).double()  # teleport_steps=1
+# run_methods(
+#     x0,
+#     Rosenbrock,
+#     bench.function.Rosenbrock(d),
+#     stepsize=lr,
+#     epochs=5000,
+#     teleport_num=10000,
+#     teleport_lr=10**-5,
+#     teleport_lr_norm=10000,
+#     teleport_steps=teleport_steps,
+#     logscale=True,
+# )
 
-x0 = torch.tensor([-0.2, 0.5], requires_grad=True).double()  # teleport_steps=5
+# x0 = torch.tensor([-0.2, 0.5], requires_grad=True).double()  # teleport_steps=5
+# run_methods(
+#     x0,
+#     Rastrigin,
+#     bench.function.Rastrigin(d),
+#     stepsize=1,
+#     epochs=100,
+#     teleport_num=1000,
+#     teleport_lr=1e-5,
+#     teleport_lr_norm=1e-2,
+#     teleport_steps=teleport_steps,
+# )
+
+
+# x0 = torch.tensor([7.5, -4.0], requires_grad=True).double()  # teleport_steps=5
+# run_methods(
+#     x0,
+#     Booth,
+#     bench.function.Booth(d),
+#     stepsize=1,
+#     epochs=100,
+#     teleport_num=1000,
+#     teleport_lr=1e-2,
+#     teleport_lr_norm=1e1,
+#     teleport_steps=teleport_steps,
+# )
+
+
+# x0 = torch.tensor([-8.0, 1.0], requires_grad=True).double()  # teleport_steps=5
+# run_methods(
+#     x0,
+#     BukinN6,
+#     bench.function.BukinN6(d),
+#     stepsize=1,
+#     epochs=100,
+#     teleport_num=1000,
+#     teleport_lr=1e-2,
+#     teleport_lr_norm=1e1,
+#     teleport_steps=teleport_steps,
+# )
+
+
+# x0 = torch.tensor([0.0, 0.0], requires_grad=True).double()  # teleport_steps=5
+# run_methods(
+#     x0,
+#     GoldsteinPrice,
+#     bench.function.GoldsteinPrice(d),
+#     stepsize=1,
+#     epochs=100,
+#     teleport_num=1000,
+#     teleport_lr=1e-9,
+#     teleport_lr_norm=1e-2,
+#     teleport_steps=teleport_steps,
+#     logscale=True,
+# )
+
+
+x0 = torch.tensor([0.0, 2.0], requires_grad=True).double()  # teleport_steps=5
 run_methods(
     x0,
-    Rastrigin,
-    bench.function.Rastrigin(d),
+    Himmelblau,
+    bench.function.Himmelblau(d),
     stepsize=1,
     epochs=100,
     teleport_num=1000,
-    teleport_lr=1e-5,
-    teleport_lr_norm=1e-2,
+    teleport_lr=1e-4,
+    teleport_lr_norm=1e-0,
     teleport_steps=teleport_steps,
+    logscale=True,
 )
