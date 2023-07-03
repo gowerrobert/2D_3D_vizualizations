@@ -101,10 +101,8 @@ def linear_sqp(
 
                 x.add_(Hv, alpha=eta_step)
 
-                if allow_sublevel and eta_step * vHv - f_diff <= 0:
-                    # skip projection since step is inside half-space.
-                    tqdm.write("Skipping projection.")
-                else:
+                # skip projection since step if allowed
+                if not allow_sublevel or eta_step * vHv - f_diff > 0:
                     negstep = (f_diff - eta_step * vHv) / grad_norm
                     x.add_(grad, alpha=negstep.item())
 
@@ -137,6 +135,12 @@ def linear_sqp(
                     # reset and try with smaller step-size.
                     eta = eta * 0.8
                     x[:] = x_prev[:]
+
+        # report if line-search failed
+        if t == max_tries - 1:
+            tqdm.write(
+                "WARNING: Line-search failed to return feasible step-size."
+            )
 
         # try to increase step-size if merit bound isn't too tight.
         if line_search and RHS / LHS >= 5.0:
