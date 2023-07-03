@@ -48,7 +48,7 @@ def run_methods(
     sqp_teleport = partial(
         linear_sqp,
         max_steps=teleport_steps,
-        eta=teleport_lr,
+        lam=teleport_lr,
         verbose=True,
         normalize=False,
     )
@@ -68,7 +68,7 @@ def run_methods(
     sqp_teleport_norm = partial(
         linear_sqp,
         max_steps=teleport_steps,
-        eta=teleport_lr_norm,
+        lam=teleport_lr_norm,
         verbose=True,
         normalize=True,
     )
@@ -88,7 +88,7 @@ def run_methods(
     sqp_teleport_sub = partial(
         linear_sqp,
         max_steps=teleport_steps,
-        eta=teleport_lr,
+        lam=teleport_lr,
         verbose=True,
         allow_sublevel=True,
     )
@@ -108,7 +108,7 @@ def run_methods(
     sqp_teleport_ls = partial(
         linear_sqp,
         max_steps=teleport_steps,
-        eta=1,
+        lam=1,
         verbose=True,
         line_search=True,
     )
@@ -128,8 +128,8 @@ def run_methods(
     # primal_dual_teleport = partial(
     #     primal_dual_subgrad,
     #     max_steps=teleport_steps,
-    #     eta=1e-4,
-    #     dual_eta=1e2,
+    #     lam=1e-4,
+    #     dual_lam=1e2,
     #     verbose=False,
     # )
     # t0 = time.perf_counter()
@@ -149,7 +149,7 @@ def run_methods(
     #     penalty_method,
     #     max_steps=teleport_steps,
     #     mu=al_penalty,
-    #     eta=1e-10,
+    #     lam=1e-10,
     #     verbose=True,
     # )
     # t0 = time.perf_counter()
@@ -171,7 +171,7 @@ def run_methods(
     #     max_inner_steps=100,
     #     inner_tol=1e-3,
     #     mu=al_penalty,
-    #     eta=al_lr * stepsize,
+    #     lam=al_lr * stepsize,
     #     verbose=True,
     # )
     # t0 = time.perf_counter()
@@ -215,7 +215,7 @@ def run_methods(
     plot_level_set_results(bench_func, results, show=False, logscale=logscale)
 
 
-teleport_steps = 200
+teleport_steps = 100
 
 d = 2
 lr = 1
@@ -232,30 +232,29 @@ run_methods(
     teleport_steps=teleport_steps,
 )
 
-teleport_steps = 500
-x0 = torch.tensor([-2.0, 2.0], requires_grad=True).double()  # teleport_steps=1
-run_methods(
-    x0,
-    Rosenbrock,
-    bench.function.Rosenbrock(d),
-    stepsize=lr,
-    epochs=5000,
-    teleport_num=10000,
-    teleport_lr=10**-5,
-    teleport_lr_norm=10000,
-    teleport_steps=teleport_steps,
-    logscale=True,
-)
+# x0 = torch.tensor([-2.0, 2.0], requires_grad=True).double()  # teleport_steps=1
+# run_methods(
+#     x0,
+#     Rosenbrock,
+#     bench.function.Rosenbrock(d),
+#     stepsize=lr,
+#     epochs=5000,
+#     teleport_num=10000,
+#     teleport_lr=10**-5,
+#     teleport_lr_norm=10000,
+#     teleport_steps=teleport_steps,
+#     logscale=True,
+# )
 
-x0 = torch.tensor([-0.2, 0.5], requires_grad=True).double()  # teleport_steps=5
-run_methods(
-    x0,
-    Rastrigin,
-    bench.function.Rastrigin(d),
-    stepsize=1,
-    epochs=100,
-    teleport_num=1000,
-    teleport_lr=1e-5,
-    teleport_lr_norm=1e-2,
-    teleport_steps=teleport_steps,
-)
+# x0 = torch.tensor([-0.2, 0.5], requires_grad=True).double()  # teleport_steps=5
+# run_methods(
+#     x0,
+#     Rastrigin,
+#     bench.function.Rastrigin(d),
+#     stepsize=1,
+#     epochs=100,
+#     teleport_num=1000,
+#     teleport_lr=1e-5,
+#     teleport_lr_norm=1e-2,
+#     teleport_steps=teleport_steps,
+# )

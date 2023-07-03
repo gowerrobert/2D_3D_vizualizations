@@ -8,6 +8,8 @@ from tqdm import tqdm
 import numpy as np
 
 alpha = 1e-3
+beta = 0.8
+beta_inv = 1.25
 tol = 1e-6
 max_tries = 100
 mu_scale = 10
@@ -17,7 +19,7 @@ def linear_sqp(
     x,
     obj_fn,
     max_steps,
-    eta,
+    lam,
     normalize=False,
     allow_sublevel=False,
     line_search=False,
@@ -30,7 +32,7 @@ def linear_sqp(
         obj_fn: callable function which evaluates the objective.
             Must support backward passes.
         max_steps: the maximum number of steps to run the linear SQP method.
-        eta: the step-size to use for each step of linear SQP.
+        lam: the step-size to use for each step of linear SQP.
 
     Returns:
         x: approximate solution to teleportation problem.
@@ -44,6 +46,11 @@ def linear_sqp(
 
     f_diff_next = None
     grad_norm_next = None
+
+    if allow_sublevel:
+        penalty_fn = lambda z: torch.maximum(-z, torch.tensor([0]))
+    else:
+        penalty_fn = torch.abs
 
     for t in tqdm(range(max_steps)):
         if f_next is None:
@@ -80,7 +87,7 @@ def linear_sqp(
 
             # check termination conditions
             proj = vHv_g * grad - Hv
-            if proj @ proj <= tol and torch.abs(f_diff) <= tol:
+            if proj @ proj <= tol and penalty_fn(f_diff) <= tol:
                 tqdm.write(
                     "KKT conditions approximations satisfied. Terminating."
                 )
@@ -95,15 +102,15 @@ def linear_sqp(
         for i in range(max_tries):
             # evaluate update
             with torch.no_grad():
-                eta_step = eta
+                lambda_step = lam
                 if normalize:
-                    eta_step = eta / grad_norm
+                    lambda_step = lam / grad_norm
 
-                x.add_(Hv, alpha=eta_step)
+                x.add_(Hv, alpha=lambda_step)
 
                 # skip projection since step if allowed
-                if not allow_sublevel or eta_step * vHv - f_diff > 0:
-                    negstep = (f_diff - eta_step * vHv) / grad_norm
+                if not allow_sublevel or lambda_step * vHv - f_diff > 0:
+                    negstep = (f_diff - lambda_step * vHv) / grad_norm
                     x.add_(grad, alpha=negstep.item())
 
             if not line_search:
@@ -122,18 +129,18 @@ def linear_sqp(
                     f_diff_next = f0 - f_next
                     x_diff = x - x_prev
 
-                    LHS = -grad_norm_next + 2 * mu * torch.abs(f_diff_next)
+                    LHS = -grad_norm_next + 2 * mu * penalty_fn(f_diff_next)
                     RHS = (
                         -grad_norm
                         + 2 * alpha * Hv @ x_diff
-                        + 2 * (1 - alpha) * mu * torch.abs(f_diff)
+                        + 2 * (1 - alpha) * mu * penalty_fn(f_diff)
                     )
 
                     if LHS <= RHS:
                         break
 
                     # reset and try with smaller step-size.
-                    eta = eta * 0.8
+                    lam = lam * beta
                     x[:] = x_prev[:]
 
         # report if line-search failed
@@ -144,7 +151,7 @@ def linear_sqp(
 
         # try to increase step-size if merit bound isn't too tight.
         if line_search and RHS / LHS >= 5.0:
-            eta = eta * 1.25
+            lam = lam * beta_inv
 
     return x
 
@@ -156,7 +163,7 @@ def al_method(
     max_inner_steps,
     inner_tol,
     mu,
-    eta,
+    lam,
     verbose=False,
 ):
     """Teleport using augmented Lagrangian method.
@@ -172,7 +179,7 @@ def al_method(
         inner_tol: the tolerance for terminating the inner optimization
             method.
         mu: the penalty strength.
-        eta: the step-size for the inner optimization method.
+        lam: the step-size for the inner optimization method.
         verbose: whether or not to print iteration statistics.
 
     Returns:
@@ -182,7 +189,7 @@ def al_method(
     f0 = obj_fn(x).item()
 
     # dual parameters
-    lam = 0
+    eta = 0
 
     # deviation from level set
     f_diff = 0
@@ -199,7 +206,7 @@ def al_method(
             with torch.no_grad():
                 f_diff = f0 - func_out.item()
 
-                al_grad = (lam + mu * f_diff) * grad - Hv
+                al_grad = (eta + mu * f_diff) * grad - Hv
                 grad_norm = al_grad @ al_grad
 
                 if verbose:
@@ -221,7 +228,7 @@ def al_method(
         with torch.no_grad():
             func_out = obj_fn(x)
             f_diff = f0 - func_out
-            lam = lam - mu * f_diff
+            eta = eta - mu * f_diff
 
     return x
 
@@ -231,7 +238,7 @@ def penalty_method(
     obj_fn,
     max_steps,
     mu,
-    eta,
+    lam,
     verbose=False,
 ):
     """Teleport by solving a simple penalty method.
@@ -242,7 +249,7 @@ def penalty_method(
             Must support backward passes.
         max_steps: the maximum number of steps to run.
         mu: the strength of the penalty parameter.
-        eta: the step-size to use for each step.
+        lam: the step-size to use for each step.
 
     Returns:
         x: approximate solution to teleportation problem.
@@ -270,7 +277,7 @@ def penalty_method(
 
             penalty_grad = (mu * f_diff) * grad - Hv
 
-            x.sub_(penalty_grad, alpha=eta)
+            x.sub_(penalty_grad, alpha=lam)
 
     return x
 
@@ -283,8 +290,8 @@ def primal_dual_subgrad(
     x,
     obj_fn,
     max_steps,
-    eta,
-    dual_eta,
+    lam,
+    dual_lam,
     verbose=False,
 ):
     """Teleport using augmented Lagrangian method.
@@ -300,7 +307,7 @@ def primal_dual_subgrad(
         inner_tol: the tolerance for terminating the inner optimization
             method.
         mu: the penalty strength.
-        eta: the step-size for the inner optimization method.
+        lam: the step-size for the inner optimization method.
         verbose: whether or not to print iteration statistics.
 
     Returns:
@@ -310,7 +317,7 @@ def primal_dual_subgrad(
     f0 = obj_fn(x).item()
 
     # dual parameters
-    lam = 0
+    eta = 0
 
     # deviation from level set
     f_diff = 0
@@ -324,16 +331,16 @@ def primal_dual_subgrad(
         Hv = torch.autograd.functional.hvp(obj_fn, x, grad)[1]
 
         with torch.no_grad():
-            grad = -lam * grad - Hv
+            grad = -eta * grad - Hv
             grad_norm = grad @ grad
 
             if verbose:
                 tqdm.write(
-                    f"Iteration {t}/{max_steps}: Function Diff: {f_diff}, Grad norm: {grad_norm.item()}, Lambda: {lam}"
+                    f"Iteration {t+1}/{max_steps}: Function Diff: {f_diff}, Grad norm: {grad_norm.item()}, Eta: {eta}"
                 )
 
             # gradient descent step
-            x.sub_(grad, alpha=eta / (t + 1))
+            x.sub_(grad, alpha=lam / (t + 1))
 
         func_out = obj_fn(x)
 
@@ -341,6 +348,6 @@ def primal_dual_subgrad(
             f_diff = f0 - func_out.item()
 
             # gradient ascent step
-            lam = lam + (dual_eta / (t + 1)) * f_diff
+            eta = eta + (dual_lam / (t + 1)) * f_diff
 
     return x
