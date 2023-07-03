@@ -7,35 +7,10 @@ import torch
 from tqdm import tqdm
 import numpy as np
 
-
-def try_update(
-    x,
-    Hv,
-    vHv,
-    denom,
-    grad,
-    f_diff,
-    eta,
-    normalize=False,
-    allow_sublevel=False,
-):
-    with torch.no_grad():
-        eta_step = eta
-        if normalize:
-            eta_step = eta / denom
-
-        x.add_(Hv, alpha=eta_step)
-
-        if allow_sublevel and eta_step * vHv - f_diff <= 0:
-            # skip projection since step is inside half-space.
-            tqdm.write("Skipping projection")
-            return x
-
-        negstep = (f_diff - eta_step * vHv) / denom
-
-        x.add_(grad, alpha=negstep.item())
-
-    return x
+alpha = 1e-3
+tol = 1e-6
+max_tries = 100
+mu_scale = 10
 
 
 def linear_sqp(
@@ -60,20 +35,40 @@ def linear_sqp(
     Returns:
         x: approximate solution to teleportation problem.
     """
+    x0 = x.clone()
     f0 = obj_fn(x).item()
+    mu = torch.tensor([0])
+
+    f_next = None
+    grad_next = None
+
+    f_diff_next = None
+    grad_norm_next = None
 
     for t in tqdm(range(max_steps)):
-        func_out = obj_fn(x)
+        if f_next is None:
+            func_out = obj_fn(x)
+            grad = torch.autograd.grad(func_out, x)[
+                0
+            ]  # ,create_graph=True,retain_graph=True
+        else:
+            # use computations from line-search
+            func_out = f_next
+            grad = grad_next
 
-        grad = torch.autograd.grad(func_out, x)[
-            0
-        ]  # ,create_graph=True,retain_graph=True
+        if torch.isnan(func_out) or torch.isinf(func_out):
+            tqdm.write("Teleportation failed! Returning initialization...")
+            return x0
 
         Hv = torch.autograd.functional.hvp(obj_fn, x, grad)[1]
 
         with torch.no_grad():
-            f_diff = f0 - func_out
-            grad_norm = grad @ grad
+            if f_diff_next is None:
+                f_diff = f0 - func_out
+                grad_norm = grad @ grad
+            else:
+                grad_norm = grad_norm_next
+                f_diff = f_diff_next
 
             if verbose:
                 tqdm.write(
@@ -81,84 +76,70 @@ def linear_sqp(
                 )
 
             vHv = torch.inner(Hv, grad)
+            vHv_g = vHv / grad_norm
 
-            x_old = x.clone()
-            x = try_update(
-                x,
-                Hv,
-                vHv,
-                grad_norm,
-                grad,
-                f_diff,
-                eta,
-                normalize=normalize,
-                allow_sublevel=allow_sublevel,
-            )
+            # check termination conditions
+            proj = vHv_g * grad - Hv
+            if proj @ proj <= tol and torch.abs(f_diff) <= tol:
+                tqdm.write(
+                    "KKT conditions approximations satisfied. Terminating."
+                )
+                return x
 
-        if line_search:
-            f_next = obj_fn(x)
-            g_next = torch.autograd.grad(f_next, x)[0]
-            f_diff_next = f0 - f_next
-            if normalize:
-                mu = 1
-                LHS = -torch.log(g_next @ g_next) + 2 * mu * torch.abs(
-                    f_diff_next
-                )
-                RHS = (
-                    -torch.log(grad_norm)
-                    + 2 * mu * torch.abs(f_diff)
-                    - (mu * torch.sign(f_diff) * grad + Hv / grad_norm)
-                    @ (x - x_old)
-                )
-            else:
-                mu = 1e3
-                LHS = -g_next @ g_next + 2 * mu * torch.abs(f_diff_next)
-                RHS = (
-                    -grad_norm
-                    + 2 * mu * torch.abs(f_diff)
-                    - (mu * torch.sign(f_diff) * grad + Hv) @ (x - x_old)
-                )
+            # estimate penalty strength for line-search merit function
+            mu = mu_scale * torch.abs(vHv_g)
 
-            while LHS > RHS:
-                eta = eta * 0.8
-                print(eta)
-                # reset
-                x[:] = x_old
-                # try again
-                x = try_update(
-                    x,
-                    Hv,
-                    vHv,
-                    grad_norm,
-                    grad,
-                    f_diff,
-                    eta,
-                    normalize=normalize,
-                    allow_sublevel=allow_sublevel,
-                )
-                f_next = obj_fn(x)
-                g_next = torch.autograd.grad(f_next, x)[0]
-                f_diff_next = f0 - f_next
+            # housekeeping for line-search
+            x_prev = torch.tensor(x, requires_grad=True)
 
+        for i in range(max_tries):
+            # evaluate update
+            with torch.no_grad():
+                eta_step = eta
                 if normalize:
-                    LHS = -torch.log(g_next @ g_next) + 2 * mu * torch.abs(
-                        f_diff_next
-                    )
-                    RHS = (
-                        -torch.log(grad_norm)
-                        + 2 * mu * torch.abs(f_diff)
-                        - (mu * torch.sign(f_diff) * grad + Hv / grad_norm)
-                        @ (x - x_old)
-                    )
+                    eta_step = eta / grad_norm
+
+                x.add_(Hv, alpha=eta_step)
+
+                if allow_sublevel and eta_step * vHv - f_diff <= 0:
+                    # skip projection since step is inside half-space.
+                    tqdm.write("Skipping projection.")
                 else:
-                    LHS = -g_next @ g_next + 2 * mu * torch.abs(f_diff_next)
+                    negstep = (f_diff - eta_step * vHv) / grad_norm
+                    x.add_(grad, alpha=negstep.item())
+
+            if not line_search:
+                # accept step-size immediately
+                break
+
+            else:
+                # proceed with line-search
+                f_next = obj_fn(x)
+                grad_next = torch.autograd.grad(f_next, x)[0]
+
+                with torch.no_grad():
+                    # quantities will be re-used for next step
+                    # if the step-size is accepted.
+                    grad_norm_next = grad_next @ grad_next
+                    f_diff_next = f0 - f_next
+                    x_diff = x - x_prev
+
+                    LHS = -grad_norm_next + 2 * mu * torch.abs(f_diff_next)
                     RHS = (
                         -grad_norm
-                        + 2 * mu * torch.abs(f_diff)
-                        - (mu * torch.sign(f_diff) * grad + Hv) @ (x - x_old)
+                        + 2 * alpha * Hv @ x_diff
+                        + 2 * (1 - alpha) * mu * torch.abs(f_diff)
                     )
 
-            # try to increase step-size
+                    if LHS <= RHS:
+                        break
+
+                    # reset and try with smaller step-size.
+                    eta = eta * 0.8
+                    x[:] = x_prev[:]
+
+        # try to increase step-size if merit bound isn't too tight.
+        if line_search and RHS / LHS >= 5.0:
             eta = eta * 1.25
 
     return x

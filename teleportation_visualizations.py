@@ -108,10 +108,9 @@ def run_methods(
     sqp_teleport_ls = partial(
         linear_sqp,
         max_steps=teleport_steps,
-        eta=teleport_lr_norm * 10,
+        eta=1,
         verbose=True,
         line_search=True,
-        normalize=True,
     )
     t0 = time.perf_counter()
     gd_ls_tp_x_list, gd_ls_tp_fval = run_GD_teleport(
@@ -216,7 +215,7 @@ def run_methods(
     plot_level_set_results(bench_func, results, show=False, logscale=logscale)
 
 
-teleport_steps = 100
+teleport_steps = 200
 
 d = 2
 lr = 1
