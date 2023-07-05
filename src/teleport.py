@@ -7,12 +7,15 @@ import torch
 from tqdm import tqdm
 import numpy as np
 
-alpha = 1e-3
-beta = 0.8
-beta_inv = 1.25
-tol = 1e-10
-max_tries = 100
-mu_scale = 2
+# global parameters
+
+ALPHA = 1e-3
+BETA = 0.8
+BETA_INV = 1.25
+GRAD_TOL = 1e-10
+CONST_TOL = 1e-10
+MAX_BACKTRACKS = 100
+MU_SCALE = 2
 
 
 def slp(
@@ -87,19 +90,19 @@ def slp(
 
             # check termination conditions
             proj = vHv_g * grad - Hv
-            if proj @ proj <= tol and penalty_fn(f_diff) <= tol:
+            if proj @ proj <= GRAD_TOL and penalty_fn(f_diff) <= CONST_TOL:
                 tqdm.write(
                     "KKT conditions approximately satisfied. Terminating SLP procedure."
                 )
                 return x
 
             # estimate penalty strength for line-search merit function
-            mu = mu_scale * torch.abs(vHv_g)
+            mu = MU_SCALE * torch.abs(vHv_g)
 
             # housekeeping for line-search
             x_prev = torch.tensor(x, requires_grad=True)
 
-        for i in range(max_tries):
+        for i in range(MAX_BACKTRACKS):
             # evaluate update
             with torch.no_grad():
                 x.add_(Hv, alpha=lam)
@@ -128,19 +131,19 @@ def slp(
                     LHS = -grad_norm_next + 2 * mu * penalty_fn(f_diff_next)
                     RHS = (
                         -grad_norm
-                        + 2 * alpha * Hv @ x_diff
-                        + 2 * (1 - alpha) * mu * penalty_fn(f_diff)
+                        + 2 * ALPHA * Hv @ x_diff
+                        + 2 * (1 - ALPHA) * mu * penalty_fn(f_diff)
                     )
 
                     if LHS <= RHS:
                         break
 
                     # reset and try with smaller step-size.
-                    lam = lam * beta
+                    lam = lam * BETA
                     x[:] = x_prev[:]
 
         # report if line-search failed
-        if i == max_tries - 1:
+        if i == MAX_BACKTRACKS - 1:
             tqdm.write(
                 "WARNING: Line-search failed to return feasible step-size."
             )
@@ -148,7 +151,7 @@ def slp(
 
         # try to increase step-size if merit bound isn't too tight.
         if line_search and RHS / LHS >= 5.0:
-            lam = lam * beta_inv
+            lam = lam * BETA_INV
 
     return x
 
@@ -158,6 +161,7 @@ def normalized_slp(
     obj_fn,
     max_steps,
     lam,
+    allow_sublevel=False,
     line_search=False,
     verbose=False,
 ):
@@ -185,6 +189,11 @@ def normalized_slp(
 
     f_diff_next = None
     grad_norm_next = None
+
+    if allow_sublevel:
+        penalty_fn = lambda z: torch.maximum(-z, torch.tensor([0]))
+    else:
+        penalty_fn = torch.abs
 
     for t in tqdm(range(max_steps)):
         if f_next is None:
@@ -222,24 +231,27 @@ def normalized_slp(
 
             # check termination conditions
             proj = vHv_g * grad - Hv
-            if proj @ proj <= tol and torch.abs(f_diff) <= tol:
+            if proj @ proj <= GRAD_TOL and penalty_fn(f_diff) <= CONST_TOL:
                 tqdm.write(
                     "KKT conditions approximately satisfied. Terminating SLP procedure."
                 )
                 return x
 
             # estimate penalty strength for line-search merit function
-            mu = mu_scale * torch.abs(vHv_g)
+            mu = MU_SCALE * torch.abs(vHv_g)
 
             # housekeeping for line-search
             x_prev = torch.tensor(x, requires_grad=True)
 
-        for i in range(max_tries):
+        for i in range(MAX_BACKTRACKS):
             # evaluate update
             with torch.no_grad():
                 x.add_(Hv, alpha=lam)
-                negstep = (f_diff - lam * vHv) / grad_norm
-                x.add_(grad, alpha=negstep.item())
+
+                # skip projection since step if allowed
+                if not allow_sublevel or lam * vHv - f_diff > 0:
+                    negstep = (f_diff - lam * vHv) / grad_norm
+                    x.add_(grad, alpha=negstep.item())
 
             if not line_search:
                 # accept step-size immediately
@@ -257,24 +269,24 @@ def normalized_slp(
                     f_diff_next = f0 - f_next
                     x_diff = x - x_prev
 
-                    LHS = -torch.log(grad_norm_next) + 2 * mu * torch.abs(
+                    LHS = -torch.log(grad_norm_next) + 2 * mu * penalty_fn(
                         f_diff_next
                     )
                     RHS = (
                         -torch.log(grad_norm)
-                        + 2 * alpha * Hv @ x_diff
-                        + 2 * (1 - alpha) * mu * torch.abs(f_diff)
+                        + 2 * ALPHA * Hv @ x_diff
+                        + 2 * (1 - ALPHA) * mu * penalty_fn(f_diff)
                     )
 
                     if LHS <= RHS:
                         break
 
                     # reset and try with smaller step-size.
-                    lam = lam * beta
+                    lam = lam * BETA
                     x[:] = x_prev[:]
 
         # report if line-search failed
-        if i == max_tries - 1:
+        if i == MAX_BACKTRACKS - 1:
             tqdm.write(
                 "WARNING: Line-search failed to return feasible step-size."
             )
@@ -282,7 +294,7 @@ def normalized_slp(
 
         # try to increase step-size if merit bound isn't too tight.
         if line_search and RHS / LHS >= 5.0:
-            lam = lam * beta_inv
+            lam = lam * BETA_INV
 
     return x
 

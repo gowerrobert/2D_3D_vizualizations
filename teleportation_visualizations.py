@@ -118,6 +118,7 @@ def run_methods(
         lam=1,
         verbose=True,
         line_search=True,
+        allow_sublevel=True,
     )
     t0 = time.perf_counter()
     gd_ls_tp_x_list, gd_ls_tp_fval = run_GD_teleport(
@@ -161,18 +162,18 @@ teleport_steps = 500
 
 d = 2
 lr = 1
-x0 = torch.tensor([-0.1, 2.0], requires_grad=True).double()
-run_methods(
-    x0,
-    IllQuad,
-    bench.function.IllQuad(d),
-    stepsize=lr,
-    epochs=500,
-    teleport_num=1000,
-    teleport_lr=1e-3,
-    teleport_lr_norm=1,
-    teleport_steps=teleport_steps,
-)
+# x0 = torch.tensor([-0.1, 2.0], requires_grad=True).double()
+# run_methods(
+#     x0,
+#     IllQuad,
+#     bench.function.IllQuad(d),
+#     stepsize=lr,
+#     epochs=500,
+#     teleport_num=1000,
+#     teleport_lr=1e-3,
+#     teleport_lr_norm=1,
+#     teleport_steps=teleport_steps,
+# )
 
 # x0 = torch.tensor([-2.0, 2.0], requires_grad=True).double()  # teleport_steps=1
 # run_methods(
