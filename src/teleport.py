@@ -12,7 +12,7 @@ beta = 0.8
 beta_inv = 1.25
 tol = 1e-10
 max_tries = 100
-mu_scale = 10
+mu_scale = 2
 
 
 def slp(
@@ -20,7 +20,6 @@ def slp(
     obj_fn,
     max_steps,
     lam,
-    normalize=False,
     allow_sublevel=False,
     line_search=False,
     verbose=False,
@@ -39,6 +38,7 @@ def slp(
     """
     x0 = x.clone()
     f0 = obj_fn(x).item()
+    lam0 = lam
     mu = torch.tensor([0])
 
     f_next = None
@@ -79,7 +79,7 @@ def slp(
 
             if verbose:
                 tqdm.write(
-                    f"Iteration {t}/{max_steps}: Function Diff: {f_diff.item()}, Grad norm: {grad_norm.item()}"
+                    f"Iteration {t+1}/{max_steps}: Function Diff: {f_diff.item()}, Grad norm: {grad_norm.item()}"
                 )
 
             vHv = torch.inner(Hv, grad)
@@ -102,15 +102,11 @@ def slp(
         for i in range(max_tries):
             # evaluate update
             with torch.no_grad():
-                lambda_step = lam
-                if normalize:
-                    lambda_step = lam / grad_norm
-
-                x.add_(Hv, alpha=lambda_step)
+                x.add_(Hv, alpha=lam)
 
                 # skip projection since step if allowed
-                if not allow_sublevel or lambda_step * vHv - f_diff > 0:
-                    negstep = (f_diff - lambda_step * vHv) / grad_norm
+                if not allow_sublevel or lam * vHv - f_diff > 0:
+                    negstep = (f_diff - lam * vHv) / grad_norm
                     x.add_(grad, alpha=negstep.item())
 
             if not line_search:
@@ -148,6 +144,141 @@ def slp(
             tqdm.write(
                 "WARNING: Line-search failed to return feasible step-size."
             )
+            lam = lam0
+
+        # try to increase step-size if merit bound isn't too tight.
+        if line_search and RHS / LHS >= 5.0:
+            lam = lam * beta_inv
+
+    return x
+
+
+def normalized_slp(
+    x,
+    obj_fn,
+    max_steps,
+    lam,
+    line_search=False,
+    verbose=False,
+):
+    """Teleport by solving successive linear approximations.
+
+    This version normalizes the
+
+    Params:
+        x: the starting point for optimization.
+        obj_fn: callable function which evaluates the objective.
+            Must support backward passes.
+        max_steps: the maximum number of steps to run the linear SQP method.
+        lam: the step-size to use for each step of linear SQP.
+
+    Returns:
+        x: approximate solution to teleportation problem.
+    """
+    x0 = x.clone()
+    f0 = obj_fn(x).item()
+    lam0 = lam
+    mu = torch.tensor([0])
+
+    f_next = None
+    grad_next = None
+
+    f_diff_next = None
+    grad_norm_next = None
+
+    for t in tqdm(range(max_steps)):
+        if f_next is None:
+            func_out = obj_fn(x)
+            grad = torch.autograd.grad(func_out, x)[
+                0
+            ]  # ,create_graph=True,retain_graph=True
+        else:
+            # use computations from line-search
+            func_out = f_next
+            grad = grad_next
+
+        if torch.isnan(func_out) or torch.isinf(func_out):
+            tqdm.write("Teleportation failed! Returning initialization...")
+            return x0
+
+        Hv = torch.autograd.functional.hvp(obj_fn, x, grad)[1]
+
+        with torch.no_grad():
+            if f_diff_next is None:
+                f_diff = f0 - func_out
+                grad_norm = grad @ grad
+            else:
+                grad_norm = grad_norm_next
+                f_diff = f_diff_next
+
+            if verbose:
+                tqdm.write(
+                    f"Iteration {t+1}/{max_steps}: Function Diff: {f_diff.item()}, Grad norm: {grad_norm.item()}"
+                )
+
+            Hv = Hv / grad_norm
+            vHv = torch.inner(Hv, grad)
+            vHv_g = vHv / grad_norm
+
+            # check termination conditions
+            proj = vHv_g * grad - Hv
+            if proj @ proj <= tol and torch.abs(f_diff) <= tol:
+                tqdm.write(
+                    "KKT conditions approximately satisfied. Terminating SLP procedure."
+                )
+                return x
+
+            # estimate penalty strength for line-search merit function
+            mu = mu_scale * torch.abs(vHv_g)
+
+            # housekeeping for line-search
+            x_prev = torch.tensor(x, requires_grad=True)
+
+        for i in range(max_tries):
+            # evaluate update
+            with torch.no_grad():
+                x.add_(Hv, alpha=lam)
+                negstep = (f_diff - lam * vHv) / grad_norm
+                x.add_(grad, alpha=negstep.item())
+
+            if not line_search:
+                # accept step-size immediately
+                break
+
+            else:
+                # proceed with line-search
+                f_next = obj_fn(x)
+                grad_next = torch.autograd.grad(f_next, x)[0]
+
+                with torch.no_grad():
+                    # quantities will be re-used for next step
+                    # if the step-size is accepted.
+                    grad_norm_next = grad_next @ grad_next
+                    f_diff_next = f0 - f_next
+                    x_diff = x - x_prev
+
+                    LHS = -torch.log(grad_norm_next) + 2 * mu * torch.abs(
+                        f_diff_next
+                    )
+                    RHS = (
+                        -torch.log(grad_norm)
+                        + 2 * alpha * Hv @ x_diff
+                        + 2 * (1 - alpha) * mu * torch.abs(f_diff)
+                    )
+
+                    if LHS <= RHS:
+                        break
+
+                    # reset and try with smaller step-size.
+                    lam = lam * beta
+                    x[:] = x_prev[:]
+
+        # report if line-search failed
+        if i == max_tries - 1:
+            tqdm.write(
+                "WARNING: Line-search failed to return feasible step-size."
+            )
+            lam = lam0
 
         # try to increase step-size if merit bound isn't too tight.
         if line_search and RHS / LHS >= 5.0:
@@ -211,7 +342,7 @@ def al_method(
 
                 if verbose:
                     tqdm.write(
-                        f"Iteration {t}/{max_inner_steps}: Function Diff: {f_diff}, AL Grad norm: {grad_norm.item()}"
+                        f"Iteration {t+1}/{max_inner_steps}: Function Diff: {f_diff}, AL Grad norm: {grad_norm.item()}"
                     )
 
                 # termination criterion.
@@ -272,7 +403,7 @@ def penalty_method(
             if verbose:
                 grad_norm = grad @ grad
                 tqdm.write(
-                    f"Iteration {t}/{max_steps}: Function Diff: {f_diff}, Grad norm: {grad_norm.item()}"
+                    f"Iteration {t+1}/{max_steps}: Function Diff: {f_diff}, Grad norm: {grad_norm.item()}"
                 )
 
             penalty_grad = (mu * f_diff) * grad - Hv

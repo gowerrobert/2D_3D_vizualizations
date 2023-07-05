@@ -31,6 +31,7 @@ from src.torch_functions import (
 )
 from src.teleport import (
     slp,
+    normalized_slp,
     al_method,
     penalty_method,
     identity,
@@ -58,7 +59,6 @@ def run_methods(
         max_steps=teleport_steps,
         lam=teleport_lr,
         verbose=True,
-        normalize=False,
     )
     t0 = time.perf_counter()
     gdtp_x_list, gdtp_fval = run_GD_teleport(
@@ -74,11 +74,10 @@ def run_methods(
 
     # normalized version
     sqp_teleport_norm = partial(
-        slp,
+        normalized_slp,
         max_steps=teleport_steps,
         lam=teleport_lr_norm,
         verbose=True,
-        normalize=True,
     )
     t0 = time.perf_counter()
     gd_normtp_x_list, gd_normtp_fval = run_GD_teleport(
@@ -114,9 +113,9 @@ def run_methods(
 
     # line-search version
     sqp_teleport_ls = partial(
-        slp,
+        normalized_slp,
         max_steps=teleport_steps,
-        lam=1e-2,
+        lam=1,
         verbose=True,
         line_search=True,
     )
@@ -162,18 +161,18 @@ teleport_steps = 500
 
 d = 2
 lr = 1
-# x0 = torch.tensor([-0.1, 2.0], requires_grad=True).double()
-# run_methods(
-#     x0,
-#     IllQuad,
-#     bench.function.IllQuad(d),
-#     stepsize=lr,
-#     epochs=500,
-#     teleport_num=1000,
-#     teleport_lr=1e-3,
-#     teleport_lr_norm=1,
-#     teleport_steps=teleport_steps,
-# )
+x0 = torch.tensor([-0.1, 2.0], requires_grad=True).double()
+run_methods(
+    x0,
+    IllQuad,
+    bench.function.IllQuad(d),
+    stepsize=lr,
+    epochs=500,
+    teleport_num=1000,
+    teleport_lr=1e-3,
+    teleport_lr_norm=1,
+    teleport_steps=teleport_steps,
+)
 
 # x0 = torch.tensor([-2.0, 2.0], requires_grad=True).double()  # teleport_steps=1
 # run_methods(
@@ -246,16 +245,16 @@ lr = 1
 # )
 
 
-x0 = torch.tensor([0.0, 2.0], requires_grad=True).double()  # teleport_steps=5
-run_methods(
-    x0,
-    Himmelblau,
-    bench.function.Himmelblau(d),
-    stepsize=1,
-    epochs=100,
-    teleport_num=1000,
-    teleport_lr=1e-4,
-    teleport_lr_norm=1e-0,
-    teleport_steps=teleport_steps,
-    logscale=True,
-)
+# x0 = torch.tensor([0.0, 2.0], requires_grad=True).double()  # teleport_steps=5
+# run_methods(
+#     x0,
+#     Himmelblau,
+#     bench.function.Himmelblau(d),
+#     stepsize=1,
+#     epochs=100,
+#     teleport_num=1000,
+#     teleport_lr=1e-4,
+#     teleport_lr_norm=1e-0,
+#     teleport_steps=teleport_steps,
+#     logscale=True,
+# )
