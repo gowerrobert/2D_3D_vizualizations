@@ -161,14 +161,16 @@ def run_GD_teleport(
     x_list.append(x[0].item())
     y_list.append(x[1].item())
 
+    teleport_path = []
+
     for ep in tqdm(range(epochs)):
         if fval[-1] <= EPS_GLOBAL:
             break
-
+        
         if teleport_num != -1:
             if (ep) % teleport_num == 0:
                 # run teleport procedure
-                x = teleport_fn(x, computeValue)
+                x, teleport_path = teleport_fn(x, computeValue)
 
                 func_out = computeValue(x)
                 fval.append(computeValue(x).item())
@@ -202,7 +204,7 @@ def run_GD_teleport(
         y_list.append(x[1].item())
 
     print("gd tp-", teleport_num, " loss: ", fval[-1])
-    return [x_list, y_list], fval
+    return [x_list, y_list], fval, teleport_path
 
 
 def run_SGD(computeValue, epochs=20, d=2, lr=1.0, x0=None):

@@ -10,6 +10,9 @@ from PIL import Image
 cmap = [(0, "#2f9599"), (0.45, "#eeeeee"), (1, "#8800ff")]
 cmap = cm.colors.LinearSegmentedColormap.from_list("Custom", cmap, N=256)
 
+title_fs = 24 
+axis_fs = 22 
+
 
 def latex_img(latex):
     base_url = r"https://latex.codecogs.com/png.latex?\dpi{400}\\"
@@ -24,7 +27,7 @@ def plot_2d(
     n_space=1000,
     cmap=cmap,
     XYZ=None,
-    ax=None,
+    fig=None,
     show=True,
     logscale=False,
 ):
@@ -38,9 +41,11 @@ def plot_2d(
         X, Y, Z = XYZ
 
     # create new ax if None
-    if ax is None:
+    if fig is None:
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
+    else:
+        ax = plt.gca()
 
     # add contours and contours lines
     # CS3 = ax.contour(X, Y, Z, levels=30, linewidths=0.5, colors='#999')
@@ -63,13 +68,17 @@ def plot_2d(
             cmap=cmap,
             alpha=0.7,
         )
+    plt.xticks([])
+    plt.yticks([])
 
     cbar = fig.colorbar(CS3)
-    cbar.ax.set_ylabel("function value")
+    cbar.set_ticks([])
+    cbar.ax.set_ylabel("$f(w)$", fontsize=axis_fs-2)
+    plt.title(function.name, fontsize=title_fs)
 
     # add labels and set equal aspect ratio
-    ax.set_xlabel("X0")
-    ax.set_ylabel("X1")
+    ax.set_xlabel("$w_0$", fontsize=axis_fs)
+    ax.set_ylabel("$w_1$", fontsize=axis_fs)
     # ax.set_aspect(aspect="equal")
     if show:
         plt.show()

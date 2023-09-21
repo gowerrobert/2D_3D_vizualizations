@@ -44,6 +44,8 @@ def slp(
     lam0 = lam
     mu = torch.tensor([0])
 
+    teleport_path = []
+
     f_next = None
     grad_next = None
 
@@ -56,6 +58,7 @@ def slp(
         penalty_fn = torch.abs
 
     for t in tqdm(range(max_steps)):
+        teleport_path.append(x.detach().numpy())
         if f_next is None:
             func_out = obj_fn(x)
             grad = torch.autograd.grad(func_out, x)[
@@ -94,7 +97,7 @@ def slp(
                 tqdm.write(
                     "KKT conditions approximately satisfied. Terminating SLP procedure."
                 )
-                return x
+                return x, teleport_path
 
             # estimate penalty strength for line-search merit function
             mu = MU_SCALE * torch.abs(vHv_g)
@@ -153,7 +156,7 @@ def slp(
         if line_search and RHS / LHS >= 5.0:
             lam = lam * BETA_INV
 
-    return x
+    return x, teleport_path
 
 
 def normalized_slp(
@@ -184,6 +187,8 @@ def normalized_slp(
     lam0 = lam
     mu = torch.tensor([0])
 
+    teleport_path = []
+
     f_next = None
     grad_next = None
 
@@ -196,6 +201,8 @@ def normalized_slp(
         penalty_fn = torch.abs
 
     for t in tqdm(range(max_steps)):
+        teleport_path.append(x.clone().detach().numpy())
+
         if f_next is None:
             func_out = obj_fn(x)
             grad = torch.autograd.grad(func_out, x)[
@@ -235,7 +242,7 @@ def normalized_slp(
                 tqdm.write(
                     "KKT conditions approximately satisfied. Terminating SLP procedure."
                 )
-                return x
+                return x, teleport_path
 
             # estimate penalty strength for line-search merit function
             mu = MU_SCALE * torch.abs(vHv_g)
@@ -296,7 +303,7 @@ def normalized_slp(
         if line_search and RHS / LHS >= 5.0:
             lam = lam * BETA_INV
 
-    return x
+    return x, teleport_path
 
 
 def al_method(

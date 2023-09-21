@@ -618,7 +618,7 @@ class Booth:
 
     def __init__(self, d):
         self.d = d
-        self.input_domain = np.array([[-10, 10], [-10, 10]])
+        self.input_domain = np.array([[-4, 8], [-6, 4]])
 
     def get_param(self):
         return {}
@@ -1317,7 +1317,7 @@ class GoldsteinPrice:
 
     def __init__(self, d):
         self.d = d
-        self.input_domain = np.array([[-2, 2], [-2, 2]])
+        self.input_domain = np.array([[-1.5, 1.5], [-1.75, 1.25]])
 
     def get_param(self):
         return {}
