@@ -34,7 +34,7 @@ def plot_level_set_results(
     show=True,
     logscale=False,
 ):
-    fig = plt.figure(figsize=(6, 4))
+    fig = plt.figure(figsize=(6, 3.5))
     bench.plot_2d(
         bench_function,
         n_space=100,
@@ -45,6 +45,12 @@ def plot_level_set_results(
     X_domain, Y_domain = bench_function.input_domain
     X_min, minimum = bench_function.get_global_minimum(2)
     plt.plot(X_min[0], X_min[1], "*", zorder=3, markersize=special_marker_size, color="yellow")
+
+    if bench_function.name == "Booth":
+        plt.text(X_min[0]-0.2, X_min[1]+0.3, '$w*$', horizontalalignment='right', verticalalignment='center', fontsize=20)
+    else:
+        plt.text(X_min[0]+0.1, X_min[1]+0.1, '$w*$', horizontalalignment='left', verticalalignment='bottom', fontsize=20)
+
     for i, key in enumerate(results.keys()):
         times, fvals, x_list, teleport_path = results[key]
         mk = markers[i]
@@ -72,7 +78,20 @@ def plot_level_set_results(
                 marker="x",
             )
 
-        # plt.plot(x_list[0][0], x_list[1][0], "x", markersize=init_marker_size, color="k")
+        if key == "GD (Teleport)":
+            if bench_function.name == "Booth":
+                side = "left"
+            else:
+                side = "center"
+            plt.text(x_list[0][1], x_list[1][1]+0.1, '$w_0^+$', horizontalalignment=side, verticalalignment='bottom', fontsize=20)
+
+    if bench_function.name == "Booth":
+        offset = 0.5 
+    else:
+        offset = 0.1
+    plt.text(x_list[0][0], x_list[1][0]+offset, '$w_0$', horizontalalignment='center', verticalalignment='bottom', fontsize=20)
+    
+
     handles, labels = plt.gca().get_legend_handles_labels()
     
     plt.xlim(X_domain)

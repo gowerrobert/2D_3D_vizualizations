@@ -77,8 +77,8 @@ def plot_2d(
     plt.title(function.name, fontsize=title_fs)
 
     # add labels and set equal aspect ratio
-    ax.set_xlabel("$w_0$", fontsize=axis_fs)
-    ax.set_ylabel("$w_1$", fontsize=axis_fs)
+    ax.set_xlabel("$x$", fontsize=axis_fs)
+    ax.set_ylabel("$y$", fontsize=axis_fs)
     # ax.set_aspect(aspect="equal")
     if show:
         plt.show()

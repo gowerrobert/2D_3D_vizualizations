@@ -30,12 +30,8 @@ from src.torch_functions import (
     Himmelblau,
 )
 from src.teleport import (
-    slp,
     normalized_slp,
-    al_method,
-    penalty_method,
     identity,
-    primal_dual_subgrad,
 )
 from src.algorithms import run_GD_teleport, run_newton
 from src.plotting import plot_function_values, plot_level_set_results
@@ -53,69 +49,12 @@ def run_methods(
     teleport_steps=3,
     logscale=False,
 ):
-    # teleport using linear SQP.
-    # sqp_teleport = partial(
-    #     slp,
-    #     max_steps=teleport_steps,
-    #     lam=teleport_lr,
-    #     verbose=True,
-    # )
-    # t0 = time.perf_counter()
-    # gdtp_x_list, gdtp_fval = run_GD_teleport(
-    #     func,
-    #     sqp_teleport,
-    #     epochs=epochs,
-    #     x0=x0,
-    #     d=d,
-    #     lr=stepsize,
-    #     teleport_num=teleport_num,
-    # )
-    # gdtp_time = time.perf_counter() - t0
-
-    # # normalized version
-    # sqp_teleport_norm = partial(
-    #     normalized_slp,
-    #     max_steps=teleport_steps,
-    #     lam=teleport_lr_norm,
-    #     verbose=True,
-    # )
-    # t0 = time.perf_counter()
-    # gd_normtp_x_list, gd_normtp_fval = run_GD_teleport(
-    #     func,
-    #     sqp_teleport_norm,
-    #     epochs=epochs,
-    #     x0=x0,
-    #     d=d,
-    #     lr=stepsize,
-    #     teleport_num=teleport_num,
-    # )
-    # gd_normtp_time = time.perf_counter() - t0
-
-    # # sub-level set version
-    # sqp_teleport_sub = partial(
-    #     slp,
-    #     max_steps=teleport_steps,
-    #     lam=teleport_lr,
-    #     verbose=True,
-    #     allow_sublevel=True,
-    # )
-    # t0 = time.perf_counter()
-    # gd_sub_tp_x_list, gd_sub_tp_fval = run_GD_teleport(
-    #     func,
-    #     sqp_teleport_sub,
-    #     epochs=epochs,
-    #     x0=x0,
-    #     d=d,
-    #     lr=stepsize,
-    #     teleport_num=teleport_num,
-    # )
-    # gd_sub_tp_time = time.perf_counter() - t0
 
     # line-search version
     sqp_teleport_ls = partial(
         normalized_slp,
         max_steps=teleport_steps,
-        lam=1,
+        rho=10,
         verbose=True,
         line_search=True,
         allow_sublevel=True,
@@ -143,14 +82,19 @@ def run_methods(
     )
     gd_time = time.perf_counter() - t0
     t0 = time.perf_counter()
-    newt_x_list, newt_fval = run_newton(func, epochs=20, x0=x0, d=d, lr=0.8)
+    newt_x_list, newt_fval = run_newton(func, epochs=20, x0=x0, d=d, lr=0.99)
     newt_time = time.perf_counter() - t0
     t0 = time.perf_counter()
     results = {
         # "SLP": (gdtp_time, gdtp_fval, gdtp_x_list),
         # "SLP (Log Trick)": (gd_normtp_time, gd_normtp_fval, gd_normtp_x_list),
         # "SLP (Sub-level)": (gd_sub_tp_time, gd_sub_tp_fval, gd_sub_tp_x_list),
-        "GD (Teleport)": (gd_ls_tp_time, gd_ls_tp_fval, gd_ls_tp_x_list, gd_ls_tp_path),
+        "GD (Teleport)": (
+            gd_ls_tp_time,
+            gd_ls_tp_fval,
+            gd_ls_tp_x_list,
+            gd_ls_tp_path,
+        ),
         "GD": (gd_time, gd_fval, gd_x_list, []),
         "Newton": (newt_time, newt_fval, newt_x_list, []),
     }
